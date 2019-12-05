@@ -17,7 +17,7 @@ class VGGBase(nn.Module):
         super(VGGBase, self).__init__()
 
         # Standard convolutional layers in VGG16
-        self.conv1_1 = nn.Conv2d(3, 64, kernel_size=3, padding=1)  # stride = 1, by default
+        self.conv1_1 = nn.Conv2d(1, 64, kernel_size=3, padding=1)  # stride = 1, by default
         self.conv1_2 = nn.Conv2d(64, 64, kernel_size=3, padding=1)
         self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
 
@@ -46,7 +46,7 @@ class VGGBase(nn.Module):
         self.conv7 = nn.Conv2d(1024, 1024, kernel_size=1)
 
         # Load pretrained layers
-        self.load_pretrained_layers()
+        #self.load_pretrained_layers()
 
     def forward(self, image):
         """
@@ -450,7 +450,7 @@ class SSD300(nn.Module):
         for i in range(batch_size):
             # Decode object coordinates from the form we regressed predicted boxes to
             decoded_locs = cxcy_to_xy(
-                gcxgcy_to_cxcy(predicted_locs[i], self.priors_cxcy))  # (8732, 4), these are fractional pt. coordinates
+                gcxgcy_to_cxcy(predicted_locs[i], self.priors_cxcy.to(device)))  # (8732, 4), these are fractional pt. coordinates
 
             # Lists to store boxes and scores for this image
             image_boxes = list()
@@ -491,7 +491,9 @@ class SSD300(nn.Module):
 
                     # Suppress boxes whose overlaps (with this box) are greater than maximum overlap
                     # Find such boxes and update suppress indices
-                    suppress = torch.max(suppress, overlap[box] > max_overlap)
+                    condition = overlap[box] > max_overlap
+                    condition = torch.tensor(condition, dtype=torch.uint8).to(device)
+                    suppress = torch.max(suppress, condition)
                     # The max operation retains previously suppressed boxes, like an 'OR' operation
 
                     # Don't suppress this box, even though it has an overlap of 1 with itself

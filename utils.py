@@ -2,14 +2,15 @@ import json
 import os
 import torch
 import random
+import numpy as np
+import skimage
 import xml.etree.ElementTree as ET
 import torchvision.transforms.functional as FT
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Label map
-voc_labels = ('aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car', 'cat', 'chair', 'cow', 'diningtable',
-              'dog', 'horse', 'motorbike', 'person', 'pottedplant', 'sheep', 'sofa', 'train', 'tvmonitor')
+voc_labels = ('lying_down', 'standing', 'sitting')
 label_map = {k: v + 1 for v, k in enumerate(voc_labels)}
 label_map['background'] = 0
 rev_label_map = {v: k for k, v in label_map.items()}  # Inverse mapping
@@ -49,7 +50,82 @@ def parse_annotation(annotation_path):
     return {'boxes': boxes, 'labels': labels, 'difficulties': difficulties}
 
 
-def create_data_lists(voc07_path, voc12_path, output_folder):
+def create_data_lists(data_folder, output_folder, val_ratio=0.3):
+
+    # Annotations files and train_images
+    annotations = []
+    images = []
+    for serie in os.listdir(data_folder):
+        annotation_path = os.path.join(os.path.abspath(data_folder), serie, 'Annotations')
+        if os.path.exists(annotation_path):
+            for annotation in os.listdir(annotation_path):
+                annotations.append(os.path.join(annotation_path, annotation))
+                images.append(
+                    os.path.join(annotation_path.replace('Annotations', 'Thermique'), annotation.replace('xml', 'png')))
+
+    # shuffle annotations and images
+    data = list(zip(images, annotations))
+    random.shuffle(data)
+    images, annotations = list(zip(*data))
+
+    # Train data
+    train_images = images[:int(len(images)*(1-val_ratio))]
+    train_annotations = annotations[:int(len(images)*(1-val_ratio))]
+
+    n_objects = 0
+    train_objects = list()
+    for annotation in train_annotations:
+
+        # Parse annotation's XML file
+        objects = parse_annotation(annotation)
+        if len(objects) == 0:
+            continue
+        n_objects += len(objects['labels'])
+        train_objects.append(objects)
+
+    assert len(train_objects) == len(train_images)
+
+    # Save to file
+    with open(os.path.join(output_folder, 'TRAIN_images_test.json'), 'w') as j:
+        json.dump(train_images, j)
+    with open(os.path.join(output_folder, 'TRAIN_objects_test.json'), 'w') as j:
+        json.dump(train_objects, j)
+    with open(os.path.join(output_folder, 'label_map.json'), 'w') as j:
+        json.dump(label_map, j)  # save label map too
+
+    print('\nThere are %d training images containing a total of %d objects. Files have been saved to %s.' % (
+        len(train_images), n_objects, os.path.abspath(output_folder)))
+
+    # Validation data
+    validation_images = images[len(train_images):]
+    validation_annotations = annotations[len(train_annotations):]
+
+    n_objects = 0
+    validation_objects = list()
+    for annotation in validation_annotations:
+
+        # Parse annotation's XML file
+        objects = parse_annotation(annotation)
+        if len(objects) == 0:
+            continue
+        n_objects += len(objects['labels'])
+        validation_objects.append(objects)
+
+    assert len(validation_objects) == len(validation_images)
+
+    # Save to file
+    with open(os.path.join(output_folder, 'TEST_images_test.json'), 'w') as j:
+        json.dump(validation_images, j)
+    with open(os.path.join(output_folder, 'TEST_objects_test.json'), 'w') as j:
+        json.dump(validation_objects, j)
+    with open(os.path.join(output_folder, 'label_map.json'), 'w') as j:
+        json.dump(label_map, j)  # save label map too
+
+    print('\nThere are %d validation images containing a total of %d objects. Files have been saved to %s.' % (
+        len(validation_images), n_objects, os.path.abspath(output_folder)))
+
+
+def create_data_lists_from_voc(voc07_path, voc12_path, output_folder):
     """
     Create lists of images, the bounding boxes and labels of the objects in these images, and save these to file.
 
@@ -634,6 +710,88 @@ def transform(image, boxes, labels, difficulties, split):
 
     # Normalize by mean and standard deviation of ImageNet data that our base VGG was trained on
     new_image = FT.normalize(new_image, mean=mean, std=std)
+
+
+    return new_image, new_boxes, new_labels, new_difficulties
+
+
+def thermal_image_preprocessing(image, boxes=None):
+    '''
+    Simple preprocessing for thermal images
+
+    :param image: PIL image of shape (w, h)
+    :param boxes: box coordinates of the image
+    :return: torch tensor of shape (1, w, h) and float32 type
+    '''
+
+    new_img = np.array(image)
+    # Normalization
+    new_img = (new_img - np.min(new_img)) / (np.amax(new_img) - np.amin(new_img))
+    new_img.astype('float32')
+    # Resize (bilinear)
+    new_img = skimage.transform.resize(new_img, (300, 300)).astype('float32')
+    # Expand array to make it corresponds to the shape (N, c, w, h) channel first
+    new_img = np.expand_dims(new_img, axis=0)
+    # numpy to tensor
+    new_img = torch.FloatTensor(new_img)
+
+    if boxes is not None:
+        old_dims = torch.FloatTensor([image.width, image.height, image.width, image.height]).unsqueeze(0)
+        new_boxes = boxes / old_dims  # percent coordinates
+        return new_img, new_boxes
+
+    return new_img
+
+
+def transform_custom(image, boxes, labels, difficulties, split):
+    """
+        Apply the transformations above.
+
+        :param image: image, a PIL Image
+        :param boxes: bounding boxes in boundary coordinates, a tensor of dimensions (n_objects, 4)
+        :param labels: labels of objects, a tensor of dimensions (n_objects)
+        :param difficulties: difficulties of detection of these objects, a tensor of dimensions (n_objects)
+        :param split: one of 'TRAIN' or 'TEST', since different sets of transformations are applied
+        :return: transformed image, transformed bounding box coordinates, transformed labels, transformed difficulties
+        """
+    assert split in {'TRAIN', 'TEST'}
+
+    new_image = image
+    new_boxes = boxes
+    new_labels = labels
+    new_difficulties = difficulties
+    # Skip the following operations if validation/evaluation
+    if split == 'TRAIN':
+        # A series of photometric distortions in random order, each with 50% chance of occurrence, as in Caffe repo
+        # new_image = photometric_distort(new_image)
+
+        # Convert PIL image to Torch tensor
+        new_image = FT.to_tensor(new_image)
+
+        # Expand image (zoom out) with a 50% chance - helpful for training detection of small objects
+        # Fill surrounding space with the mean of ImageNet data that our base VGG was trained on
+        #if random.random() < 0.5:
+        #    new_image, new_boxes = expand(new_image, boxes, filler=mean)
+
+        # Randomly crop image (zoom in)
+        new_image, new_boxes, new_labels, new_difficulties = random_crop(new_image, new_boxes, new_labels,
+                                                                         new_difficulties)
+
+        # Convert Torch tensor to PIL image
+        new_image = FT.to_pil_image(new_image)
+
+        # Flip image with a 50% chance
+        if random.random() < 0.5:
+            new_image, new_boxes = flip(new_image, new_boxes)
+
+    # Resize image to (300, 300) - this also converts absolute boundary coordinates to their fractional form
+    new_image, new_boxes = resize(new_image, new_boxes, dims=(300, 300))
+
+    # Convert PIL image to Torch tensor
+    new_image = FT.to_tensor(new_image).float()
+
+    # Normalize by mean and standard deviation of ImageNet data that our base VGG was trained on
+    new_image = FT.normalize(new_image, mean=[new_image.mean()], std=[new_image.std()])
 
     return new_image, new_boxes, new_labels, new_difficulties
 
