@@ -10,7 +10,7 @@ import torchvision.transforms.functional as FT
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Label map
-voc_labels = ('lying_down', 'standing', 'sitting')
+voc_labels = ('lying_down', 'standing', 'sitting', 'fall')
 label_map = {k: v + 1 for v, k in enumerate(voc_labels)}
 label_map['background'] = 0
 rev_label_map = {v: k for k, v in label_map.items()}  # Inverse mapping
@@ -30,7 +30,6 @@ def parse_annotation(annotation_path):
     labels = list()
     difficulties = list()
     for object in root.iter('object'):
-
         difficult = int(object.find('difficult').text == '1')
 
         label = object.find('name').text.lower().strip()
@@ -59,6 +58,7 @@ def create_data_lists(data_folder, output_folder, val_ratio=0.3):
         annotation_path = os.path.join(os.path.abspath(data_folder), serie, 'Annotations')
         if os.path.exists(annotation_path):
             for annotation in os.listdir(annotation_path):
+
                 annotations.append(os.path.join(annotation_path, annotation))
                 images.append(
                     os.path.join(annotation_path.replace('Annotations', 'Thermique'), annotation.replace('xml', 'png')))
@@ -711,7 +711,6 @@ def transform(image, boxes, labels, difficulties, split):
     # Normalize by mean and standard deviation of ImageNet data that our base VGG was trained on
     new_image = FT.normalize(new_image, mean=mean, std=std)
 
-
     return new_image, new_boxes, new_labels, new_difficulties
 
 
@@ -734,7 +733,6 @@ def thermal_image_preprocessing(image, boxes=None):
     new_img = np.expand_dims(new_img, axis=0)
     # numpy to tensor
     new_img = torch.FloatTensor(new_img)
-
     if boxes is not None:
         old_dims = torch.FloatTensor([image.width, image.height, image.width, image.height]).unsqueeze(0)
         new_boxes = boxes / old_dims  # percent coordinates
