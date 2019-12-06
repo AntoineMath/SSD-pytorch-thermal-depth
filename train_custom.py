@@ -2,6 +2,8 @@ import time
 import torch.backends.cudnn as cudnn
 import torch.optim
 import torch.utils.data
+import torchvision
+from torch.utils.tensorboard import SummaryWriter
 from model import SSD300, MultiBoxLoss
 from datasets import PascalVOCDataset, CustomDataset
 from utils import *
@@ -27,7 +29,7 @@ lr = 1e-3  # learning rate
 momentum = 0.9  # momentum
 weight_decay = 5e-4  # weight decay
 grad_clip = None  # clip if gradients are exploding, which may happen at larger batch sizes (sometimes at 32) - you will recognize it by a sorting error in the MuliBox loss calculation
-
+tb = SummaryWriter()
 cudnn.benchmark = True
 
 
@@ -78,6 +80,8 @@ def main():
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True,
                                              collate_fn=val_dataset.collate_fn, num_workers=workers,
                                              pin_memory=True)
+    #images, boxes_, labels_, difficulties_ = next(iter(train_loader))
+
     # Epochs
     for epoch in range(start_epoch, epochs):
         # Paper describes decaying the learning rate at the 80000th, 100000th, 120000th 'iteration', i.e. model update or batch
@@ -118,6 +122,7 @@ def main():
 
         # Save checkpoint
         save_checkpoint(epoch, epochs_since_improvement, model, optimizer, val_loss, best_loss, is_best)
+    tb.close()
 
 
 def train(train_loader, model, criterion, optimizer, epoch):
@@ -152,7 +157,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
         # Loss
         loss = criterion(predicted_locs, predicted_scores, boxes, labels)  # scalar
-
+        tb.add_scalar('Loss', loss, epoch)
         # Backward prop.
         optimizer.zero_grad()
         loss.backward()
@@ -211,6 +216,7 @@ def validate(val_loader, model, criterion):
 
             # Loss
             loss = criterion(predicted_locs, predicted_scores, boxes, labels)
+            tb.add_scalar('Val_loss', loss, epoch)
 
             losses.update(loss.item(), images.size(0))
             batch_time.update(time.time() - start)
