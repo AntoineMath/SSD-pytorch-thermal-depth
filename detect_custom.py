@@ -6,7 +6,7 @@ import skimage
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Load model checkpoint
-checkpoint = 'BEST_checkpoint_ssd300.pth.tar'
+checkpoint = '/ckpt/BEST_checkpoint_ssd300_unbalanced.pth.tar'
 checkpoint = torch.load(checkpoint, map_location=torch.device('cpu'))
 start_epoch = checkpoint['epoch'] + 1
 best_loss = checkpoint['best_loss']
@@ -96,6 +96,6 @@ def detect(original_image, min_score, max_overlap, top_k, suppress=None):
 
 
 if __name__ == '__main__':
-        img_path = '/home/mathurin/prudence/data/Serie_1/Thermique/thermal119.png'
+        img_path = '/home/mathurin/prudence/data/Serie_0/Thermique/thermal23.png'
         original_image = Image.open(img_path)
-        detect(original_image, min_score=0.24, max_overlap=0.2, top_k=200).show()
+        detect(original_image, min_score=0.20, max_overlap=0.2, top_k=1).show()
