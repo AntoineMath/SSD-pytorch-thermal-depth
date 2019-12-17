@@ -4,8 +4,7 @@ TEST_objects_test.json
 TRAIN_images_test.json
 TRAIN_objects_test.json
 label_map.json
-BEST_checkpoint_ssd300.pth.tar
-checkpoint_ssd300.pth.tar
 .idea/
 __pycache__/
+ckpt/
 /runs
