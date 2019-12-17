@@ -5,7 +5,7 @@ import torch.utils.data
 import torchvision
 from torch.utils.tensorboard import SummaryWriter
 from model import SSD300, MultiBoxLoss
-from datasets import PascalVOCDataset, CustomDataset
+from datasets import PascalVOCDataset, ThermalDepthDataset
 from utils import *
 
 # Data parameters
@@ -29,7 +29,7 @@ lr = 1e-3  # learning rate
 momentum = 0.9  # momentum
 weight_decay = 5e-4  # weight decay
 grad_clip = None  # clip if gradients are exploding, which may happen at larger batch sizes (sometimes at 32) - you will recognize it by a sorting error in the MuliBox loss calculation
-tb = SummaryWriter()
+tb = SummaryWriter(comment='series_1-32')
 cudnn.benchmark = True
 
 
@@ -68,10 +68,10 @@ def main():
     criterion = MultiBoxLoss(priors_cxcy=model.priors_cxcy).to(device)
 
     # Custom dataloaders
-    train_dataset = CustomDataset(data_folder,
+    train_dataset = ThermalDepthDataset(data_folder,
                                      split='train',
                                      keep_difficult=keep_difficult)
-    val_dataset = CustomDataset(data_folder,
+    val_dataset = ThermalDepthDataset(data_folder,
                                    split='test',
                                    keep_difficult=keep_difficult)
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
@@ -80,7 +80,6 @@ def main():
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True,
                                              collate_fn=val_dataset.collate_fn, num_workers=workers,
                                              pin_memory=True)
-    #images, boxes_, labels_, difficulties_ = next(iter(train_loader))
 
     # Epochs
     for epoch in range(start_epoch, epochs):
@@ -96,8 +95,6 @@ def main():
         # So, when you're ready to decay the learning rate, just set checkpoint = 'BEST_checkpoint_ssd300.pth.tar' above
         # and have adjust_learning_rate(optimizer, 0.1) BEFORE this 'for' loop
 
-        # One epoch's training
-        # TODO: check overfitting by validation on the training set
         train(train_loader=train_loader,
               model=model,
               criterion=criterion,

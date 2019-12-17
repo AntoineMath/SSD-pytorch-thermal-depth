@@ -1,6 +1,7 @@
 from torchvision import transforms
 from utils import *
 from PIL import Image, ImageDraw, ImageFont
+import numpy as np
 import skimage
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -16,7 +17,7 @@ model = model.to(device)
 model.eval()
 
 
-def detect(original_image, min_score, max_overlap, top_k, suppress=None):
+def detect(img_array_path, img_path, min_score, max_overlap, top_k, suppress=None):
     """
     Detect objects in an image with a trained SSD300, and visualize the results.
 
@@ -29,7 +30,8 @@ def detect(original_image, min_score, max_overlap, top_k, suppress=None):
     """
 
     # preprocess
-    image = thermal_image_preprocessing(original_image)
+    img_array = np.load(img_array_path)
+    image = thermal_depth_image_preprocessing(img_array)
     # Move to default device
     image = image.to(device)
 
@@ -46,8 +48,7 @@ def detect(original_image, min_score, max_overlap, top_k, suppress=None):
 
     # Transform to original image dimensions
     original_dims = torch.FloatTensor(
-       [original_image.width, original_image.height, original_image.width, original_image.height]).unsqueeze(0)
-    #det_boxes = det_boxes * original_dims
+       [img_array.shape[1], img_array.shape[0], img_array.shape[1], img_array.shape[0]]).unsqueeze(0)
     det_boxes = det_boxes * 300
 
     # Decode class integer labels
@@ -56,12 +57,17 @@ def detect(original_image, min_score, max_overlap, top_k, suppress=None):
     # If no objects found, the detected labels will be set to ['0.'], i.e. ['background'] in SSD300.detect_objects() in model.py
     if det_labels == ['background']:
         # Just return original image
-        return original_image
+        return img_array
 
     # Annotate
-    annotated_image = (original_image-np.amin(original_image)) / (np.amax(original_image)-np.amin(original_image))
+    #annotated_image = (original_image-np.amin(original_image)) / (np.amax(original_image)-np.amin(original_image))
+    #annotated_image = skimage.transform.resize(annotated_image, (300, 300))
+    #annotated_image = annotated_image * 255
+    #annotated_image = Image.fromarray(annotated_image)
+    annotated_image = np.array(Image.open(img_path))
+    annotated_image = (annotated_image - np.amin(annotated_image)) / (np.amax(annotated_image) - np.amin(annotated_image))
     annotated_image = skimage.transform.resize(annotated_image, (300, 300))
-    annotated_image = annotated_image * 255
+    annotated_image = (annotated_image * 255).astype('uint8')
     annotated_image = Image.fromarray(annotated_image)
     draw = ImageDraw.Draw(annotated_image)
     font = ImageFont.load_default()
@@ -96,6 +102,19 @@ def detect(original_image, min_score, max_overlap, top_k, suppress=None):
 
 
 if __name__ == '__main__':
-        img_path = '/home/mathurin/prudence/data/Serie_1/Thermique/thermal119.png'
-        original_image = Image.open(img_path)
-        detect(original_image, min_score=0.24, max_overlap=0.2, top_k=200).show()
+    folder = '/home/mathurin/prudence/fusion/Serie2/'
+    img_list = os.listdir(folder + 'Fusion/')
+    array_list = os.listdir(folder + 'Array/')
+
+    # select random
+    data = list(zip(img_list, array_list))
+    random.shuffle(data)
+    images, annotations = list(zip(*data))
+    img_list = list(images)
+    array_list = list(annotations)
+
+    for i in range(5):
+        img_path = folder + 'Fusion/' + img_list[i]
+        img_array_path = folder + 'Array/' + array_list[i]
+        result = detect(img_array_path, img_path, min_score=0.20, max_overlap=0.2, top_k=1)
+        result.show()

@@ -1,5 +1,5 @@
 from utils import *
-from datasets import PascalVOCDataset
+from datasets import PascalVOCDataset, ThermalDepthDataset
 from tqdm import tqdm
 from pprint import PrettyPrinter
 
@@ -9,7 +9,7 @@ pp = PrettyPrinter()
 # Parameters
 data_folder = './'
 keep_difficult = True  # difficult ground truth objects must always be considered in mAP calculation, because these objects DO exist!
-batch_size = 64
+batch_size = 16
 workers = 4
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 checkpoint = './BEST_checkpoint_ssd300.pth.tar'
@@ -23,9 +23,9 @@ model = model.to(device)
 model.eval()
 
 # Load test data
-test_dataset = PascalVOCDataset(data_folder,
-                                split='test',
-                                keep_difficult=keep_difficult)
+test_dataset = ThermalDepthDataset(data_folder,
+                                   split='test',
+                                   keep_difficult=keep_difficult)
 test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False,
                                           collate_fn=test_dataset.collate_fn, num_workers=workers, pin_memory=True)
 

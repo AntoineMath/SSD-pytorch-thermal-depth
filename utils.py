@@ -52,8 +52,8 @@ def parse_annotation(annotation_path):
 def create_data_lists(data_folder, output_folder, val_ratio=0.3):
 
     # Annotations files and train_images
-    annotations = []
-    images = []
+    annotations = list()
+    images = list()
     for serie in os.listdir(data_folder):
         annotation_path = os.path.join(os.path.abspath(data_folder), serie, 'Annotations')
         if os.path.exists(annotation_path):
@@ -61,28 +61,36 @@ def create_data_lists(data_folder, output_folder, val_ratio=0.3):
 
                 annotations.append(os.path.join(annotation_path, annotation))
                 images.append(
-                    os.path.join(annotation_path.replace('Annotations', 'Thermique'), annotation.replace('xml', 'png')))
+                    os.path.join(annotation_path.replace('Annotations', 'Array'), annotation.replace('xml', 'npy')))
 
     # shuffle annotations and images
     data = list(zip(images, annotations))
     random.shuffle(data)
     images, annotations = list(zip(*data))
+    images = list(images)
+    annotations = list(annotations)
 
-    # Train data
     train_images = images[:int(len(images)*(1-val_ratio))]
     train_annotations = annotations[:int(len(images)*(1-val_ratio))]
+    validation_images = images[len(train_images):]
+    validation_annotations = annotations[len(train_annotations):]
 
+    # Train data
     n_objects = 0
+    n_objects_file = 0
     train_objects = list()
-    for annotation in train_annotations:
+    for i, annotation in enumerate(train_annotations):
 
         # Parse annotation's XML file
         objects = parse_annotation(annotation)
-        if len(objects) == 0:
+        if not objects['boxes']:
+            train_images.pop(i)
+            n_objects_file += 1
             continue
         n_objects += len(objects['labels'])
         train_objects.append(objects)
 
+    print(len(train_objects), len(train_images))
     assert len(train_objects) == len(train_images)
 
     # Save to file
@@ -95,22 +103,24 @@ def create_data_lists(data_folder, output_folder, val_ratio=0.3):
 
     print('\nThere are %d training images containing a total of %d objects. Files have been saved to %s.' % (
         len(train_images), n_objects, os.path.abspath(output_folder)))
+    if n_objects_file > 0:
+        print(f'There are {n_objects_file} training images that contains no object (and have been ignored)')
 
     # Validation data
-    validation_images = images[len(train_images):]
-    validation_annotations = annotations[len(train_annotations):]
 
     n_objects = 0
+    n_objects_file = 0
     validation_objects = list()
-    for annotation in validation_annotations:
+    for i, annotation in enumerate(validation_annotations):
 
         # Parse annotation's XML file
         objects = parse_annotation(annotation)
-        if len(objects) == 0:
+        if not objects['boxes']:
+            validation_images.pop(i)
+            n_objects_file += 1
             continue
         n_objects += len(objects['labels'])
         validation_objects.append(objects)
-
     assert len(validation_objects) == len(validation_images)
 
     # Save to file
@@ -123,6 +133,8 @@ def create_data_lists(data_folder, output_folder, val_ratio=0.3):
 
     print('\nThere are %d validation images containing a total of %d objects. Files have been saved to %s.' % (
         len(validation_images), n_objects, os.path.abspath(output_folder)))
+    if n_objects_file > 0:
+        print(f'There are {n_objects_file} validation images that contains no object (and have been ignored)')
 
 
 def create_data_lists_from_voc(voc07_path, voc12_path, output_folder):
@@ -714,7 +726,7 @@ def transform(image, boxes, labels, difficulties, split):
     return new_image, new_boxes, new_labels, new_difficulties
 
 
-def thermal_image_preprocessing(image, boxes=None):
+def thermal_depth_image_preprocessing(image, boxes=None):
     '''
     Simple preprocessing for thermal images
 
@@ -723,18 +735,21 @@ def thermal_image_preprocessing(image, boxes=None):
     :return: torch tensor of shape (1, w, h) and float32 type
     '''
 
-    new_img = np.array(image)
-    # Normalization
-    new_img = (new_img - np.min(new_img)) / (np.amax(new_img) - np.amin(new_img))
+    # Normalization by channel
+    new_img = image
+    new_img[:, :, 0] = (new_img[:, :, 0] - np.min(new_img[:, :, 0])) / (
+                np.amax(new_img[:, :, 0]) - np.amin(new_img[:, :, 0]))
+    new_img[:, :, 1] = (new_img[:, :, 1] - np.min(new_img[:, :, 1])) / (
+                np.amax(new_img[:, :, 1]) - np.amin(new_img[:, :, 1]))
     new_img.astype('float32')
     # Resize (bilinear)
     new_img = skimage.transform.resize(new_img, (300, 300)).astype('float32')
     # Expand array to make it corresponds to the shape (N, c, w, h) channel first
-    new_img = np.expand_dims(new_img, axis=0)
+    new_img = np.moveaxis(new_img, -1, 0)
     # numpy to tensor
     new_img = torch.FloatTensor(new_img)
     if boxes is not None:
-        old_dims = torch.FloatTensor([image.width, image.height, image.width, image.height]).unsqueeze(0)
+        old_dims = torch.FloatTensor([image.shape[1], image.shape[0], image.shape[1], image.shape[0]]).unsqueeze(0)
         new_boxes = boxes / old_dims  # percent coordinates
         return new_img, new_boxes
 
