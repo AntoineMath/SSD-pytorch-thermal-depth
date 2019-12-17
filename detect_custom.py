@@ -6,7 +6,7 @@ import skimage
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Load model checkpoint
-checkpoint = '/ckpt/BEST_checkpoint_ssd300_unbalanced.pth.tar'
+checkpoint = './ckpt/BEST_checkpoint_ssd300_unbalanced.pth.tar'
 checkpoint = torch.load(checkpoint, map_location=torch.device('cpu'))
 start_epoch = checkpoint['epoch'] + 1
 best_loss = checkpoint['best_loss']
