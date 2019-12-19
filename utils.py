@@ -61,7 +61,7 @@ def create_data_lists(data_folder, output_folder, val_ratio=0.3):
 
                 annotations.append(os.path.join(annotation_path, annotation))
                 images.append(
-                    os.path.join(annotation_path.replace('Annotations', 'Array'), annotation.replace('xml', 'npy')))
+                    os.path.join(annotation_path.replace('Annotations', 'Thermique'), annotation.replace('xml', 'png')))
 
     # shuffle annotations and images
     data = list(zip(images, annotations))
@@ -683,8 +683,6 @@ def transform(image, boxes, labels, difficulties, split):
 
     # Mean and standard deviation of ImageNet data that our base VGG from torchvision was trained on
     # see: https://pytorch.org/docs/stable/torchvision/models.html
-    mean = [0.485, 0.456, 0.406]
-    std = [0.229, 0.224, 0.225]
 
     new_image = image
     new_boxes = boxes
@@ -693,15 +691,15 @@ def transform(image, boxes, labels, difficulties, split):
     # Skip the following operations if validation/evaluation
     if split == 'TRAIN':
         # A series of photometric distortions in random order, each with 50% chance of occurrence, as in Caffe repo
-        new_image = photometric_distort(new_image)
+        #new_image = photometric_distort(new_image)
 
         # Convert PIL image to Torch tensor
         new_image = FT.to_tensor(new_image)
 
         # Expand image (zoom out) with a 50% chance - helpful for training detection of small objects
         # Fill surrounding space with the mean of ImageNet data that our base VGG was trained on
-        if random.random() < 0.5:
-            new_image, new_boxes = expand(new_image, boxes, filler=mean)
+        #if random.random() < 0.5:
+        #    new_image, new_boxes = expand(new_image, boxes, 0)
 
         # Randomly crop image (zoom in)
         new_image, new_boxes, new_labels, new_difficulties = random_crop(new_image, new_boxes, new_labels,
@@ -721,7 +719,7 @@ def transform(image, boxes, labels, difficulties, split):
     new_image = FT.to_tensor(new_image)
 
     # Normalize by mean and standard deviation of ImageNet data that our base VGG was trained on
-    new_image = FT.normalize(new_image, mean=mean, std=std)
+    new_image = FT.normalize(new_image, mean=[new_image.type('torch.FloatTensor').mean()], std=[new_image.type('torch.FloatTensor').std()])
 
     return new_image, new_boxes, new_labels, new_difficulties
 
@@ -730,7 +728,7 @@ def thermal_depth_image_preprocessing(image, boxes=None):
     '''
     Simple preprocessing for thermal images
 
-    :param image: PIL image of shape (w, h)
+    :param image: array image (h, w, c)
     :param boxes: box coordinates of the image
     :return: torch tensor of shape (1, w, h) and float32 type
     '''
