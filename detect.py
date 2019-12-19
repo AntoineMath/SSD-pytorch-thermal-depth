@@ -7,7 +7,7 @@ from PIL import Image, ImageDraw, ImageFont
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Load model checkpoint
-checkpoint = 'BEST_checkpoint_ssd300.pth.tar'
+checkpoint = './ckpt/BEST_checkpoint_ssd300.pth.tar'
 checkpoint = torch.load(checkpoint)
 start_epoch = checkpoint['epoch'] + 1
 best_loss = checkpoint['best_loss']
@@ -108,7 +108,15 @@ def detect(img_path, min_score, max_overlap, top_k, suppress=None):
 
 
 if __name__ == '__main__':
-    #with open('TEST_images_test.json'), 'r') as j:
-    #    images = json.load(j)
-    img_path = '/home/mathurin/prudence/data_no_fusion/Serie_27/Thermique/thermal63.png'
-    detect(img_path, min_score=0.2, max_overlap=0.5, top_k=1).show()
+
+    # Test sur la serie 4 (qui n'a pas ete annotee)
+    folder = '/home/mathurin/prudence/data_no_fusion/Serie_4/'
+    img_list = os.listdir(folder + 'Thermique/')
+
+    # select random
+    random.shuffle(img_list)
+
+    for i in range(10):
+        img_path = folder + 'Thermique/' + img_list[i]
+        result = detect(img_path, min_score=0.20, max_overlap=0.2, top_k=1)
+        result.show()
