@@ -9,3 +9,4 @@ checkpoint_ssd300.pth.tar
 .idea/
 __pycache__/
 /runs
+/notebooks
