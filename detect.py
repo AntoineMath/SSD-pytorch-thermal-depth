@@ -1,4 +1,6 @@
 from torchvision import transforms
+import torchvision.transforms.functional as FT
+import torch
 from utils import *
 from PIL import Image, ImageDraw, ImageFont
 
@@ -15,13 +17,13 @@ model = model.to(device)
 model.eval()
 
 # Transforms
-resize = transforms.Resize((300, 300))
-to_tensor = transforms.ToTensor()
-normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225])
+#resize = transforms.Resize((300, 300))
+#to_tensor = transforms.ToTensor()
+#normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+#                                 std=[0.229, 0.224, 0.225])
 
 
-def detect(original_image, min_score, max_overlap, top_k, suppress=None):
+def detect(img_path, min_score, max_overlap, top_k, suppress=None):
     """
     Detect objects in an image with a trained SSD300, and visualize the results.
 
@@ -34,10 +36,17 @@ def detect(original_image, min_score, max_overlap, top_k, suppress=None):
     """
 
     # Transform
-    image = normalize(to_tensor(resize(original_image)))
+    original_image = Image.open(img_path)
+    image = FT.to_tensor(original_image)
+
+
 
     # Move to default device
-    image = image.to(device)
+    image, _ = resize(original_image, boxes=torch.Tensor([0, 0, 0, 0]), dims=(300, 300))
+    image = FT.to_tensor(image)
+    image = FT.normalize(image, mean=[image.type('torch.FloatTensor').mean()],
+                             std=[image.type('torch.FloatTensor').std()])
+    image = image.type('torch.FloatTensor').to(device)
 
     # Forward prop.
     predicted_locs, predicted_scores = model(image.unsqueeze(0))
@@ -52,7 +61,8 @@ def detect(original_image, min_score, max_overlap, top_k, suppress=None):
     # Transform to original image dimensions
     original_dims = torch.FloatTensor(
         [original_image.width, original_image.height, original_image.width, original_image.height]).unsqueeze(0)
-    det_boxes = det_boxes * original_dims
+    #det_boxes = det_boxes * original_dims
+    det_boxes = det_boxes * 300
 
     # Decode class integer labels
     det_labels = [rev_label_map[l] for l in det_labels[0].to('cpu').tolist()]
@@ -63,9 +73,10 @@ def detect(original_image, min_score, max_overlap, top_k, suppress=None):
         return original_image
 
     # Annotate
-    annotated_image = original_image
+    annotated_image = Image.open(img_path.replace('Thermique', 'Thermique_8bit'))
+    annotated_image, _ = resize(annotated_image, boxes=torch.Tensor([0, 0, 0, 0]), dims=(300, 300))
     draw = ImageDraw.Draw(annotated_image)
-    font = ImageFont.truetype("./calibril.ttf", 15)
+    font = ImageFont.load_default()
 
     # Suppress specific classes, if needed
     for i in range(det_boxes.size(0)):
@@ -97,7 +108,7 @@ def detect(original_image, min_score, max_overlap, top_k, suppress=None):
 
 
 if __name__ == '__main__':
-    img_path = '/media/ssd/ssd data/VOC2007/JPEGImages/000001.jpg'
-    original_image = Image.open(img_path, mode='r')
-    original_image = original_image.convert('RGB')
-    detect(original_image, min_score=0.2, max_overlap=0.5, top_k=200).show()
+    #with open('TEST_images_test.json'), 'r') as j:
+    #    images = json.load(j)
+    img_path = '/home/mathurin/prudence/data_no_fusion/Serie_27/Thermique/thermal63.png'
+    detect(img_path, min_score=0.2, max_overlap=0.5, top_k=1).show()

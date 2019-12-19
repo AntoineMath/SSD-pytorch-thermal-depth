@@ -2,8 +2,9 @@ import torch
 from torch.utils.data import Dataset
 import json
 import os
+import numpy as np
 from PIL import Image
-from utils import transform, thermal_image_preprocessing
+from utils import transform, thermal_depth_image_preprocessing
 
 
 class PascalVOCDataset(Dataset):
@@ -85,7 +86,7 @@ class PascalVOCDataset(Dataset):
         return images, boxes, labels, difficulties  # tensor (N, 3, 300, 300), 3 lists of N tensors each
 
 
-class CustomDataset(Dataset):
+class ThermalDepthDataset(Dataset):
     """
     A pytorch Dataset class to be used in a Pytorch Dataloader to create bacthes.
     """
@@ -93,15 +94,12 @@ class CustomDataset(Dataset):
         """
         :param data_folder: folder where data files are stored following this path:
         .
-        |-- Depth_images
-            |-- depth_01.png
-             -- depth_02.png
-        |-- Thermal_image
-            |-- thermal_01.png
-             -- thermal_02.png
+        |-- Arrays (of the fusion of the depth-thermal image)
+            |-- fusion1.npy
+             -- fusion2.npy
         |-- Annotations
-            |-- thermal_01.xml
-             -- thermal_02.xml
+            |-- fusion1.xml
+             -- fusion2.xml
         :param split: split, one of 'TRAIN' or 'TEST'
         :param keep_difficult: keep or discard objects that are considered difficult to detect.
         """
@@ -121,9 +119,8 @@ class CustomDataset(Dataset):
 
     def __getitem__(self, i):
         # Read image
-        image = Image.open(self.images[i])
-
-
+        #image = np.load(self.images[i])
+        image = Image.open(self.images[i], mode='r')
         # Read objects in this image (bounding boxes, labels, difficulties)
         objects = self.objects[i]
         boxes = torch.FloatTensor(objects['boxes'])  # (n_objects, 4)
@@ -137,9 +134,9 @@ class CustomDataset(Dataset):
             difficulties = difficulties[1-difficulties]
 
         # Apply transformation
-        image, boxes = thermal_image_preprocessing(image, boxes)
-        #image, boxes, labels, difficulties = transform_custom(thermal_image, boxes, labels, difficulties, split=self.split)
-        return image, boxes, labels, difficulties
+        #image, boxes = thermal_depth_image_preprocessing(image, boxes)
+        image, boxes, labels, difficulties = transform(image, boxes, labels, difficulties, split=self.split)
+        return image.type('torch.FloatTensor'), boxes, labels, difficulties
 
     def __len__(self):
         return len(self.images)
