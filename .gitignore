@@ -10,3 +10,4 @@ checkpoint_ssd300.pth.tar
 __pycache__/
 /runs
 /notebooks
+/ckpt
