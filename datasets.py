@@ -134,7 +134,6 @@ class ThermalDepthDataset(Dataset):
             difficulties = difficulties[1-difficulties]
 
         # Apply transformation
-        #image, boxes = thermal_depth_image_preprocessing(image, boxes)
         image, boxes, labels, difficulties = transform(image, boxes, labels, difficulties, split=self.split)
         return image.type('torch.FloatTensor'), boxes, labels, difficulties
 

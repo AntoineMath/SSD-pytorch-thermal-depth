@@ -596,7 +596,7 @@ def flip(image, boxes):
     """
     Flip image horizontally.
 
-    :param image: image, a PIL Image
+    :param image: image, a numpy array thermal_depth image (w, h, 2)
     :param boxes: bounding boxes in boundary coordinates, a tensor of dimensions (n_objects, 4)
     :return: flipped image, updated bounding box coordinates
     """

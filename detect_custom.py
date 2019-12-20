@@ -60,10 +60,6 @@ def detect(img_array_path, img_path, min_score, max_overlap, top_k, suppress=Non
         return img_array
 
     # Annotate
-    #annotated_image = (original_image-np.amin(original_image)) / (np.amax(original_image)-np.amin(original_image))
-    #annotated_image = skimage.transform.resize(annotated_image, (300, 300))
-    #annotated_image = annotated_image * 255
-    #annotated_image = Image.fromarray(annotated_image)
     annotated_image = np.array(Image.open(img_path))
     annotated_image = (annotated_image - np.amin(annotated_image)) / (np.amax(annotated_image) - np.amin(annotated_image))
     annotated_image = skimage.transform.resize(annotated_image, (300, 300))
