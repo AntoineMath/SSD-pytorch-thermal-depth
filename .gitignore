@@ -8,5 +8,4 @@ label_map.json
 __pycache__/
 ckpt/
 /runs
-/notebooks
 /ckpt
