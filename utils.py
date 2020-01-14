@@ -6,6 +6,8 @@ import numpy as np
 import skimage
 import xml.etree.ElementTree as ET
 import torchvision.transforms.functional as FT
+from imgaug import augmenters as iaa
+from imgaug.augmentables.bbs import BoundingBox, BoundingBoxesOnImage
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -724,33 +726,56 @@ def transform(image, boxes, labels, difficulties, split):
     return new_image, new_boxes, new_labels, new_difficulties
 
 
-def thermal_depth_image_preprocessing(image, boxes=None):
+def data_augmentation(image, bbox):
+
+    augmenters = [iaa.Crop(percent=(0, 0.2)),
+                  iaa.Affine(rotate=(-20, 20)),
+                  iaa.AdditiveGaussianNoise(scale=0.05 * np.max(image[0])),
+                  iaa.ElasticTransformation(alpha=(0, 20.0), sigma=(4.0, 6.0)),
+                  iaa.Dropout(p=(0.0, 0.1))]
+
+    # 50 tries (in case the silhouette is to much outside the rotated image)
+    for i in range(50):
+        seq = iaa.SomeOf((0, 3), augmenters, random_order=True)
+        image_aug, bbs_aug = seq(image=image, bounding_boxes=BoundingBox(*bbox))
+        print(bbs_aug)
+        bbs_clipped = bbs_aug.clip_out_of_image(image_aug)
+
+        # Si on crop plus de 20% d'une bbox lors du clip_out_of_image(), on recommence.
+        print(bbs_clipped.area / bbs_aug.area)
+        if bbs_clipped.area / bbs_aug.area > 0.8:
+            break
+
+    return image_aug, (bbs_clipped.x1, bbs_clipped.y1, bbs_clipped.x2, bbs_clipped.y2)
+
+
+def thermal_depth_image_preprocessing(image, split, bbox=None):
     '''
     Simple preprocessing for thermal images
 
     :param image: array image (h, w, c)
-    :param boxes: box coordinates of the image
-    :return: torch tensor of shape (1, w, h) and float32 type
+    :param bbox: box coordinates of the object in the image (TODO : allow mutliple boxes)
+    :return: torch tensor of shape (2, w, h) and float32 type
     '''
+    # Standardization
+    mean = np.mean(image, axis=(0, 1))
+    std = np.std(image, axis=(0, 1))
+    image = (image - mean) / std
+    image = image.astype('float32')
+    new_bbox = bbox
 
-    # Normalization by channel
-    new_img = image
-    new_img[:, :, 0] = (new_img[:, :, 0] - np.min(new_img[:, :, 0])) / (
-                np.amax(new_img[:, :, 0]) - np.amin(new_img[:, :, 0]))
-    new_img[:, :, 1] = (new_img[:, :, 1] - np.min(new_img[:, :, 1])) / (
-                np.amax(new_img[:, :, 1]) - np.amin(new_img[:, :, 1]))
-    new_img.astype('float32')
-    # Resize (bilinear)
-    new_img = skimage.transform.resize(new_img, (300, 300)).astype('float32')
-    # Expand array to make it corresponds to the shape (N, c, w, h) channel first
+    if split == 'TRAIN':
+        image_aug, new_bbox = data_augmentation(image, bbox)
+
+    # Reshape to (2, 300, 300)
+    new_img = skimage.transform.resize(image_aug, (300, 300))
     new_img = np.moveaxis(new_img, -1, 0)
-    # numpy to tensor
     new_img = torch.FloatTensor(new_img)
-    if boxes is not None:
-        old_dims = torch.FloatTensor([image.shape[1], image.shape[0], image.shape[1], image.shape[0]]).unsqueeze(0)
-        new_boxes = boxes / old_dims  # percent coordinates
-        return new_img, new_boxes
 
+    if bbox is not None:
+        old_dims = [image.shape[1], image.shape[0], image.shape[1], image.shape[0]]
+        bbs_aug = (np.array(list(new_bbox)) / np.array(old_dims)).astype('float32')
+        return new_img, bbs_aug
     return new_img
 
 
