@@ -120,7 +120,7 @@ class ThermalDepthDataset(Dataset):
     def __getitem__(self, i):
         # Read image
         image = np.load(self.images[i])
-        #image = Image.open(self.images[i], mode='r')
+
         # Read objects in this image (bounding boxes, labels, difficulties)
         objects = self.objects[i]
         boxes = torch.FloatTensor(objects['boxes'])  # (n_objects, 4)
