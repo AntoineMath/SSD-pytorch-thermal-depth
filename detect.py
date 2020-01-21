@@ -2,12 +2,13 @@ from torchvision import transforms
 import torchvision.transforms.functional as FT
 import torch
 from utils import *
+import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Load model checkpoint
-checkpoint = './ckpt/BEST_checkpoint_ssd300.pth.tar'
+checkpoint = './ckpt/BEST_checkpoint_ssd300_fusion.pth.tar'
 checkpoint = torch.load(checkpoint)
 start_epoch = checkpoint['epoch'] + 1
 best_loss = checkpoint['best_loss']
@@ -36,17 +37,20 @@ def detect(img_path, min_score, max_overlap, top_k, suppress=None):
     """
 
     # Transform
-    original_image = Image.open(img_path)
-    image = FT.to_tensor(original_image)
+    original_image = np.load(img_path)
+    image = thermal_depth_image_preprocessing(original_image, split='val')
+    image = image.type('torch.FloatTensor').to(device)
+    #original_image = Image.open(img_path)
+    #image = FT.to_tensor(original_image)
 
 
 
     # Move to default device
-    image, _ = resize(original_image, boxes=torch.Tensor([0, 0, 0, 0]), dims=(300, 300))
-    image = FT.to_tensor(image)
-    image = FT.normalize(image, mean=[image.type('torch.FloatTensor').mean()],
-                             std=[image.type('torch.FloatTensor').std()])
-    image = image.type('torch.FloatTensor').to(device)
+    #image, _ = resize(original_image, boxes=torch.Tensor([0, 0, 0, 0]), dims=(300, 300))
+    #image = FT.to_tensor(image)
+    #image = FT.normalize(image, mean=[image.type('torch.FloatTensor').mean()],
+    #                         std=[image.type('torch.FloatTensor').std()])
+
 
     # Forward prop.
     predicted_locs, predicted_scores = model(image.unsqueeze(0))
@@ -60,7 +64,7 @@ def detect(img_path, min_score, max_overlap, top_k, suppress=None):
 
     # Transform to original image dimensions
     original_dims = torch.FloatTensor(
-        [original_image.width, original_image.height, original_image.width, original_image.height]).unsqueeze(0)
+        [original_image.shape[1], original_image.shape[0], original_image.shape[1], original_image.shape[0]]).unsqueeze(0)
     #det_boxes = det_boxes * original_dims
     det_boxes = det_boxes * 300
 
@@ -73,7 +77,8 @@ def detect(img_path, min_score, max_overlap, top_k, suppress=None):
         return original_image
 
     # Annotate
-    annotated_image = Image.open(img_path.replace('Thermique', 'Thermique_8bit'))
+    # TODO : Renommer correctement les images dans le dataset au lieu de faire des replace
+    annotated_image = Image.open(img_path.replace('Array', 'Fusion').replace('npy', 'png').replace('thermal_depth', 'Final'))
     annotated_image, _ = resize(annotated_image, boxes=torch.Tensor([0, 0, 0, 0]), dims=(300, 300))
     draw = ImageDraw.Draw(annotated_image)
     font = ImageFont.load_default()
@@ -110,13 +115,13 @@ def detect(img_path, min_score, max_overlap, top_k, suppress=None):
 if __name__ == '__main__':
 
     # Test sur la serie 4 (qui n'a pas ete annotee)
-    folder = '/home/mathurin/prudence/data_no_fusion/Serie_4/'
-    img_list = os.listdir(folder + 'Thermique/')
+    folder = '/home/mathurin/prudence/fusion/Serie4/'
+    img_list = os.listdir(folder + 'Array')
 
     # select random
     random.shuffle(img_list)
 
     for i in range(10):
-        img_path = folder + 'Thermique/' + img_list[i]
+        img_path = folder + 'Array/' + img_list[i]
         result = detect(img_path, min_score=0.20, max_overlap=0.2, top_k=1)
         result.show()
