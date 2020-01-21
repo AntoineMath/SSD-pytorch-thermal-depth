@@ -17,7 +17,7 @@ keep_difficult = True  # use objects considered difficult to detect?
 n_classes = len(label_map)  # number of different types of objects
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Learning parameters
-checkpoint = None  # path to model checkpoint, None if none
+checkpoint = './ckpt/checkpoint_ssd300_fusion.pth.tar'  # path to model checkpoint, None if none
 batch_size = 16  # batch size
 start_epoch = 0  # start at this epoch
 epochs = 10000  # number of epochs to run without early-stopping
@@ -118,7 +118,7 @@ def main():
             epochs_since_improvement = 0
 
         # Save checkpoint
-        save_checkpoint(epoch, epochs_since_improvement, model, optimizer, val_loss, best_loss, is_best)
+        save_checkpoint('checkpoint_ssd300_fusion', epoch, epochs_since_improvement, model, optimizer, val_loss, best_loss, is_best)
     tb.close()
 
 
