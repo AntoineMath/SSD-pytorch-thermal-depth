@@ -12,7 +12,7 @@ from imgaug.augmentables.bbs import BoundingBox, BoundingBoxesOnImage
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Label map
-voc_labels = ('lying_down', 'standing', 'sitting', 'fall')
+voc_labels = ('lying_down', 'standing', 'sitting')
 label_map = {k: v + 1 for v, k in enumerate(voc_labels)}
 label_map['background'] = 0
 rev_label_map = {v: k for k, v in label_map.items()}  # Inverse mapping
@@ -63,8 +63,7 @@ def create_data_lists(data_folder, output_folder, val_ratio=0.3):
 
                 annotations.append(os.path.join(annotation_path, annotation))
                 images.append(
-                    os.path.join(annotation_path.replace('Annotations', 'Thermique'), annotation.replace('xml', 'png')))
-
+                    os.path.join(annotation_path, annotation).replace('Annotations/thermal', 'Array/thermal_depth').replace('xml', 'npy'))
     # shuffle annotations and images
     data = list(zip(images, annotations))
     random.shuffle(data)
@@ -734,15 +733,13 @@ def data_augmentation(image, bbox):
                   iaa.ElasticTransformation(alpha=(0, 20.0), sigma=(4.0, 6.0)),
                   iaa.Dropout(p=(0.0, 0.1))]
 
-    # 50 tries (in case the silhouette is to much outside the rotated image)
+    # 50 tries (in case the silhouette is too much outside the rotated image)
     for i in range(50):
         seq = iaa.SomeOf((0, 3), augmenters, random_order=True)
         image_aug, bbs_aug = seq(image=image, bounding_boxes=BoundingBox(*bbox))
-        print(bbs_aug)
-        bbs_clipped = bbs_aug.clip_out_of_image(image_aug)
 
+        bbs_clipped = bbs_aug.clip_out_of_image(image_aug)
         # Si on crop plus de 20% d'une bbox lors du clip_out_of_image(), on recommence.
-        print(bbs_clipped.area / bbs_aug.area)
         if bbs_clipped.area / bbs_aug.area > 0.8:
             break
 
@@ -760,22 +757,23 @@ def thermal_depth_image_preprocessing(image, split, bbox=None):
     # Standardization
     mean = np.mean(image, axis=(0, 1))
     std = np.std(image, axis=(0, 1))
-    image = (image - mean) / std
-    image = image.astype('float32')
+    new_img = (image - mean) / std
+    new_img = new_img.astype('float32')
     new_bbox = bbox
 
     if split == 'TRAIN':
-        image_aug, new_bbox = data_augmentation(image, bbox)
+        new_img, new_bbox = data_augmentation(new_img, bbox.squeeze().tolist())
+        new_bbox = torch.FloatTensor(new_bbox).unsqueeze(0)
 
     # Reshape to (2, 300, 300)
-    new_img = skimage.transform.resize(image_aug, (300, 300))
+    new_img = skimage.transform.resize(new_img, (300, 300))
     new_img = np.moveaxis(new_img, -1, 0)
     new_img = torch.FloatTensor(new_img)
 
     if bbox is not None:
-        old_dims = [image.shape[1], image.shape[0], image.shape[1], image.shape[0]]
-        bbs_aug = (np.array(list(new_bbox)) / np.array(old_dims)).astype('float32')
-        return new_img, bbs_aug
+        old_dims = torch.FloatTensor([image.shape[1], image.shape[0], image.shape[1], image.shape[0]]).unsqueeze(0)
+        new_bbox = new_bbox / old_dims  # percent coordinates
+        return new_img, new_bbox
     return new_img
 
 
@@ -860,7 +858,7 @@ def accuracy(scores, targets, k):
     return correct_total.item() * (100.0 / batch_size)
 
 
-def save_checkpoint(epoch, epochs_since_improvement, model, optimizer, loss, best_loss, is_best):
+def save_checkpoint(ckpt_name, epoch, epochs_since_improvement, model, optimizer, loss, best_loss, is_best):
     """
     Save model checkpoint.
 
@@ -878,7 +876,7 @@ def save_checkpoint(epoch, epochs_since_improvement, model, optimizer, loss, bes
              'best_loss': best_loss,
              'model': model,
              'optimizer': optimizer}
-    filename = 'checkpoint_ssd300.pth.tar'
+    filename = ckpt_name + '.pth.tar'
     torch.save(state, './ckpt/' + filename)
     # If this checkpoint is the best so far, store a copy so it doesn't get overwritten by a worse checkpoint
     if is_best:
