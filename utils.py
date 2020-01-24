@@ -12,7 +12,7 @@ from imgaug.augmentables.bbs import BoundingBox, BoundingBoxesOnImage
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Label map
-voc_labels = ('lying_down', 'standing', 'sitting')
+voc_labels = ('lying_down', 'standing', 'sitting', 'fall')
 label_map = {k: v + 1 for v, k in enumerate(voc_labels)}
 label_map['background'] = 0
 rev_label_map = {v: k for k, v in label_map.items()}  # Inverse mapping
@@ -85,6 +85,7 @@ def create_data_lists(data_folder, output_folder, val_ratio=0.3):
         # Parse annotation's XML file
         objects = parse_annotation(annotation)
         if not objects['boxes']:
+            print(annotation)
             train_images.pop(i)
             n_objects_file += 1
             continue
