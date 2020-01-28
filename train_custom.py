@@ -113,6 +113,9 @@ def main():
         if not is_best:
             epochs_since_improvement += 1
             print("\nEpochs since last improvement: %d\n" % (epochs_since_improvement,))
+            # Earlystopping
+            if epochs_since_improvement > 50:
+                break
 
         else:
             epochs_since_improvement = 0
