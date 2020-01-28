@@ -71,15 +71,17 @@ def detect(img_path, min_score, max_overlap, top_k, suppress=None):
     # Decode class integer labels
     det_labels = [rev_label_map[l] for l in det_labels[0].to('cpu').tolist()]
 
+    # Prepare anotated image
+    # TODO : Renommer correctement les images dans le dataset au lieu de faire des replace
+    annotated_image = Image.open(img_path.replace('Array', 'Fusion').replace('npy', 'png'))
+    annotated_image, _ = resize(annotated_image, boxes=torch.Tensor([0, 0, 0, 0]), dims=(300, 300))
+
     # If no objects found, the detected labels will be set to ['0.'], i.e. ['background'] in SSD300.detect_objects() in model.py
     if det_labels == ['background']:
         # Just return original image
-        return original_image
+        return annotated_image
 
-    # Annotate
-    # TODO : Renommer correctement les images dans le dataset au lieu de faire des replace
-    annotated_image = Image.open(img_path.replace('Array', 'Fusion').replace('npy', 'png').replace('thermal_depth', 'Final'))
-    annotated_image, _ = resize(annotated_image, boxes=torch.Tensor([0, 0, 0, 0]), dims=(300, 300))
+    # Draw on the anotated image
     draw = ImageDraw.Draw(annotated_image)
     font = ImageFont.load_default()
 
@@ -115,7 +117,7 @@ def detect(img_path, min_score, max_overlap, top_k, suppress=None):
 if __name__ == '__main__':
 
     # Test sur la serie 4 (qui n'a pas ete annotee)
-    folder = '/home/mathurin/prudence/fusion/Serie4/'
+    folder = '/home/mathurin/prudence/13_01_2020_fusion/Serie4/'
     img_list = os.listdir(folder + 'Array')
 
     # select random
@@ -123,5 +125,5 @@ if __name__ == '__main__':
 
     for i in range(10):
         img_path = folder + 'Array/' + img_list[i]
-        result = detect(img_path, min_score=0.20, max_overlap=0.2, top_k=1)
+        result = detect(img_path, min_score=0.2, max_overlap=0.2, top_k=1)
         result.show()
