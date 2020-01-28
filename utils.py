@@ -8,11 +8,12 @@ import xml.etree.ElementTree as ET
 import torchvision.transforms.functional as FT
 from imgaug import augmenters as iaa
 from imgaug.augmentables.bbs import BoundingBox, BoundingBoxesOnImage
+import matplotlib.pyplot as plt
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Label map
-voc_labels = ('lying_down', 'standing', 'sitting', 'fall')
+voc_labels = ('lying_down', 'standing', 'sitting')
 label_map = {k: v + 1 for v, k in enumerate(voc_labels)}
 label_map['background'] = 0
 rev_label_map = {v: k for k, v in label_map.items()}  # Inverse mapping
@@ -35,6 +36,9 @@ def parse_annotation(annotation_path):
         difficult = int(object.find('difficult').text == '1')
 
         label = object.find('name').text.lower().strip()
+        #TODO : faire l'entrainement sur les 4 postures
+        if label == 'fall':
+            label = 'lying_down'
         if label not in label_map:
             continue
 
@@ -85,7 +89,7 @@ def create_data_lists(data_folder, output_folder, val_ratio=0.3):
         # Parse annotation's XML file
         objects = parse_annotation(annotation)
         if not objects['boxes']:
-            print(annotation)
+            #TODO : there is a bug when a xml annotion has a name which is not in the label dict
             train_images.pop(i)
             n_objects_file += 1
             continue
@@ -232,7 +236,7 @@ def decimate(tensor, m):
     return tensor
 
 
-def calculate_mAP(det_boxes, det_labels, det_scores, true_boxes, true_labels, true_difficulties):
+def calculate_mAP(det_boxes, det_labels, det_scores, true_boxes, true_labels, true_difficulties, render=False):
     """
     Calculate the Mean Average Precision (mAP) of detected objects.
 
@@ -347,6 +351,15 @@ def calculate_mAP(det_boxes, det_labels, det_scores, true_boxes, true_labels, tr
                 cumul_true_positives + cumul_false_positives + 1e-10)  # (n_class_detections)
         cumul_recall = cumul_true_positives / n_easy_class_objects  # (n_class_detections)
 
+        # Render the Precision-Recall curves
+        if render:
+            plt.plot(cumul_precision.tolist(), cumul_recall.tolist())
+            #plt.xlim(0, 1)
+            #plt.ylim(0, 1)
+            plt.xlabel('Recall')
+            plt.ylabel('Precision')
+            plt.title("PR curve for '{}' class".format(rev_label_map[c]))
+            plt.show()
         # Find the mean of the maximum of the precisions corresponding to recalls above the threshold 't'
         recall_thresholds = torch.arange(start=0, end=1.1, step=.1).tolist()  # (11)
         precisions = torch.zeros((len(recall_thresholds)), dtype=torch.float).to(device)  # (11)
