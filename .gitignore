@@ -10,3 +10,4 @@ ckpt/
 /runs
 /notebooks
 /ckpt
+create_data_lists.py
