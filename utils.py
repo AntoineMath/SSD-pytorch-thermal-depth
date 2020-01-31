@@ -6,6 +6,7 @@ import numpy as np
 import skimage
 import xml.etree.ElementTree as ET
 import torchvision.transforms.functional as FT
+import matplotlib.pyplot as plt
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -230,7 +231,7 @@ def decimate(tensor, m):
     return tensor
 
 
-def calculate_mAP(det_boxes, det_labels, det_scores, true_boxes, true_labels, true_difficulties):
+def calculate_mAP(det_boxes, det_labels, det_scores, true_boxes, true_labels, true_difficulties, render=False):
     """
     Calculate the Mean Average Precision (mAP) of detected objects.
 
@@ -242,6 +243,7 @@ def calculate_mAP(det_boxes, det_labels, det_scores, true_boxes, true_labels, tr
     :param true_boxes: list of tensors, one tensor for each image containing actual objects' bounding boxes
     :param true_labels: list of tensors, one tensor for each image containing actual objects' labels
     :param true_difficulties: list of tensors, one tensor for each image containing actual objects' difficulty (0 or 1)
+    :param render: if true, it shows the precision recall curves for all classes
     :return: list of average precisions for all classes, mean average precision (mAP)
     """
     assert len(det_boxes) == len(det_labels) == len(det_scores) == len(true_boxes) == len(true_labels) == len(true_difficulties)  # these are all lists of tensors of the same length, i.e. number of images
@@ -342,6 +344,16 @@ def calculate_mAP(det_boxes, det_labels, det_scores, true_boxes, true_labels, tr
         cumul_precision = cumul_true_positives / (
                 cumul_true_positives + cumul_false_positives + 1e-10)  # (n_class_detections)
         cumul_recall = cumul_true_positives / n_easy_class_objects  # (n_class_detections)
+
+        # Render the Precision-Recall curves
+        if render:
+            plt.plot(cumul_precision.tolist(), cumul_recall.tolist())
+            # plt.xlim(0, 1)
+            # plt.ylim(0, 1)
+            plt.xlabel('Recall')
+            plt.ylabel('Precision')
+            plt.title("PR curve for '{}' class".format(rev_label_map[c]))
+            plt.show()
 
         # Find the mean of the maximum of the precisions corresponding to recalls above the threshold 't'
         recall_thresholds = torch.arange(start=0, end=1.1, step=.1).tolist()  # (11)
