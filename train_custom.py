@@ -5,11 +5,12 @@ import torch.utils.data
 import torchvision
 from torch.utils.tensorboard import SummaryWriter
 from model import SSD300, MultiBoxLoss
-from datasets import PascalVOCDataset, ThermalDepthDataset
+from datasets import ThermalDepthDataset
 from utils import *
 
 # Data parameters
 data_folder = './'  # folder with data files
+
 keep_difficult = True  # use objects considered difficult to detect?
 
 # Model parameters
@@ -17,7 +18,7 @@ keep_difficult = True  # use objects considered difficult to detect?
 n_classes = len(label_map)  # number of different types of objects
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Learning parameters
-checkpoint = None  # path to model checkpoint, None if none
+checkpoint = 'ckpt/checkpoint_ssd300_imgaug.pth.tar'  # path to model checkpoint, None if none
 batch_size = 16  # batch size
 start_epoch = 0  # start at this epoch
 epochs = 10000  # number of epochs to run without early-stopping
@@ -31,6 +32,57 @@ weight_decay = 5e-4  # weight decay
 grad_clip = None  # clip if gradients are exploding, which may happen at larger batch sizes (sometimes at 32) - you will recognize it by a sorting error in the MuliBox loss calculation
 tb = SummaryWriter(comment='series_1-32')
 cudnn.benchmark = True
+
+
+def validate(val_loader, model, criterion):
+    """
+    One epoch's validation.
+
+    :param val_loader: DataLoader for validation data
+    :param model: model
+    :param criterion: MultiBox loss
+    :return: average validation loss
+    """
+    model.eval()  # eval mode disables dropout
+
+    batch_time = AverageMeter()
+    losses = AverageMeter()
+
+    start = time.time()
+
+    # Prohibit gradient computation explicity because I had some problems with memory
+    with torch.no_grad():
+        # Batches
+        for i, (images, boxes, labels, difficulties) in enumerate(val_loader):
+
+            # Move to default device
+            images = images.to(device)  # (N, 1, 300, 300)
+            boxes = [b.to(device) for b in boxes]
+            labels = [l.to(device) for l in labels]
+
+            # Forward prop.
+            predicted_locs, predicted_scores = model(images)  # (N, 8732, 4), (N, 8732, n_classes)
+
+            # Loss
+            loss = criterion(predicted_locs, predicted_scores, boxes, labels)
+            tb.add_scalar('Val_loss', loss, epoch)
+
+            losses.update(loss.item(), images.size(0))
+            batch_time.update(time.time() - start)
+
+            start = time.time()
+
+            # Print status
+            if i % print_freq == 0:
+                print('[{0}/{1}]\t'
+                      'Batch Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                      'Loss {loss.val:.4f} ({loss.avg:.4f})\t'.format(i, len(val_loader),
+                                                                      batch_time=batch_time,
+                                                                      loss=losses))
+
+    print('\n * LOSS - {loss.avg:.3f}\n'.format(loss=losses))
+
+    return losses.avg
 
 
 def main():
@@ -113,9 +165,10 @@ def main():
         if not is_best:
             epochs_since_improvement += 1
             print("\nEpochs since last improvement: %d\n" % (epochs_since_improvement,))
+            # TODO corriger l'earlystopping qui s'active immediatement lors du charment du checkpoint
             # Earlystopping
-            if epochs_since_improvement > 50:
-                break
+            #if epochs_since_improvement > 50:
+                #break
 
         else:
             epochs_since_improvement = 0
@@ -136,7 +189,6 @@ def train(train_loader, model, criterion, optimizer, epoch):
     :param epoch: epoch number
     """
     model.train()  # training mode enables dropout
-
     batch_time = AverageMeter()  # forward prop. + back prop. time
     data_time = AverageMeter()  # data loading time
     losses = AverageMeter()  # loss
@@ -144,8 +196,9 @@ def train(train_loader, model, criterion, optimizer, epoch):
     start = time.time()
 
     # Batches
-    for i, (images, boxes, labels, _) in enumerate(train_loader):
+    for i, (images, boxes, labels, difficulties) in enumerate(train_loader):
         data_time.update(time.time() - start)
+
 
         # Move to default device
         images = images.to(device)  # (batch_size (N), 1, 300, 300)
@@ -182,58 +235,8 @@ def train(train_loader, model, criterion, optimizer, epoch):
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'.format(epoch, i, len(train_loader),
                                                                   batch_time=batch_time,
                                                                   data_time=data_time, loss=losses))
+
     del predicted_locs, predicted_scores, images, boxes, labels  # free some memory since their histories may be stored
-
-
-def validate(val_loader, model, criterion):
-    """
-    One epoch's validation.
-
-    :param val_loader: DataLoader for validation data
-    :param model: model
-    :param criterion: MultiBox loss
-    :return: average validation loss
-    """
-    model.eval()  # eval mode disables dropout
-
-    batch_time = AverageMeter()
-    losses = AverageMeter()
-
-    start = time.time()
-
-    # Prohibit gradient computation explicity because I had some problems with memory
-    with torch.no_grad():
-        # Batches
-        for i, (images, boxes, labels, difficulties) in enumerate(val_loader):
-
-            # Move to default device
-            images = images.to(device)  # (N, 1, 300, 300)
-            boxes = [b.to(device) for b in boxes]
-            labels = [l.to(device) for l in labels]
-
-            # Forward prop.
-            predicted_locs, predicted_scores = model(images)  # (N, 8732, 4), (N, 8732, n_classes)
-
-            # Loss
-            loss = criterion(predicted_locs, predicted_scores, boxes, labels)
-            tb.add_scalar('Val_loss', loss, epoch)
-
-            losses.update(loss.item(), images.size(0))
-            batch_time.update(time.time() - start)
-
-            start = time.time()
-
-            # Print status
-            if i % print_freq == 0:
-                print('[{0}/{1}]\t'
-                      'Batch Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                      'Loss {loss.val:.4f} ({loss.avg:.4f})\t'.format(i, len(val_loader),
-                                                                      batch_time=batch_time,
-                                                                      loss=losses))
-
-    print('\n * LOSS - {loss.avg:.3f}\n'.format(loss=losses))
-
-    return losses.avg
 
 
 if __name__ == '__main__':
