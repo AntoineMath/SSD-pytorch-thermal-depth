@@ -7,6 +7,8 @@ import skimage
 import xml.etree.ElementTree as ET
 import torchvision.transforms.functional as FT
 import matplotlib.pyplot as plt
+from imgaug import augmenters as iaa
+from imgaug.augmentables.bbs import BoundingBox, BoundingBoxesOnImage
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -34,6 +36,9 @@ def parse_annotation(annotation_path):
         difficult = int(object.find('difficult').text == '1')
 
         label = object.find('name').text.lower().strip()
+        # TODO : faire l'entrainement sur les 4 postures
+        if label == 'fall':
+            label = 'lying_down'
         if label not in label_map:
             continue
 
@@ -734,34 +739,60 @@ def transform(image, boxes, labels, difficulties, split):
     return new_image, new_boxes, new_labels, new_difficulties
 
 
-def thermal_depth_image_preprocessing(image, boxes=None):
+def thermal_depth_image_preprocessing(image, split, bbox=None):
     '''
     Simple preprocessing for thermal images
 
     :param image: array image (h, w, c)
-    :param boxes: box coordinates of the image
-    :return: torch tensor of shape (1, w, h) and float32 type
+    :param bbox: box coordinates of the object in the image (TODO : allow mutliple boxes)
+    :return: torch tensor of shape (2, w, h) and float32 type
     '''
+    image = np.expand_dims(np.array(image), axis=-1)
 
-    # Normalization by channel
-    new_img = image
-    new_img[:, :, 0] = (new_img[:, :, 0] - np.min(new_img[:, :, 0])) / (
-                np.amax(new_img[:, :, 0]) - np.amin(new_img[:, :, 0]))
-    new_img[:, :, 1] = (new_img[:, :, 1] - np.min(new_img[:, :, 1])) / (
-                np.amax(new_img[:, :, 1]) - np.amin(new_img[:, :, 1]))
-    new_img.astype('float32')
-    # Resize (bilinear)
-    new_img = skimage.transform.resize(new_img, (300, 300)).astype('float32')
-    # Expand array to make it corresponds to the shape (N, c, w, h) channel first
+    # Standardization
+    mean = np.mean(image, axis=(0, 1))
+    std = np.std(image, axis=(0, 1))
+    new_img = (image - mean) / std
+    new_img = new_img.astype('float32')
+    new_bbox = bbox
+
+    if split == 'TRAIN':
+        new_img, new_bbox = data_augmentation(new_img, bbox.squeeze().tolist())
+        new_bbox = torch.FloatTensor(new_bbox).unsqueeze(0)
+
+    # Reshape to (2, 300, 300)
+    new_img = skimage.transform.resize(new_img, (300, 300))
     new_img = np.moveaxis(new_img, -1, 0)
-    # numpy to tensor
     new_img = torch.FloatTensor(new_img)
-    if boxes is not None:
-        old_dims = torch.FloatTensor([image.shape[1], image.shape[0], image.shape[1], image.shape[0]]).unsqueeze(0)
-        new_boxes = boxes / old_dims  # percent coordinates
-        return new_img, new_boxes
 
+    if bbox is not None:
+        old_dims = torch.FloatTensor([image.shape[1], image.shape[0], image.shape[1], image.shape[0]]).unsqueeze(0)
+        new_bbox = new_bbox / old_dims  # percent coordinates
+        return new_img, new_bbox
     return new_img
+
+
+def data_augmentation(image, bbox=None):
+    augmenters = [iaa.Crop(percent=(0, 0.2)),
+                  iaa.Affine(rotate=(-30, 30)),
+                  #iaa.AdditiveGaussianNoise(scale=0.05 * np.max(image[0])),
+                  # iaa.ElasticTransformation(alpha=(0, 20.0), sigma=(4.0, 6.0)),
+                  iaa.Dropout(p=(0.0, 0.1)),
+                  iaa.Fliplr(1.0)]
+
+    # 50 tries (in case the silhouette is too much outside the rotated image)
+    for i in range(50):
+        seq = iaa.SomeOf((0, 3), augmenters, random_order=True)
+
+        if bbox:
+            image_aug, bbs_aug = seq(image=image, bounding_boxes=BoundingBox(*bbox))
+
+            bbs_clipped = bbs_aug.clip_out_of_image(image_aug)
+            # Si on crop plus de 20% d'une bbox lors du clip_out_of_image(), on recommence.
+            if bbs_clipped.area / bbs_aug.area > 0.8:
+                break
+
+    return image_aug, (bbs_clipped.x1, bbs_clipped.y1, bbs_clipped.x2, bbs_clipped.y2)
 
 
 def transform_custom(image, boxes, labels, difficulties, split):
@@ -863,7 +894,7 @@ def save_checkpoint(epoch, epochs_since_improvement, model, optimizer, loss, bes
              'best_loss': best_loss,
              'model': model,
              'optimizer': optimizer}
-    filename = 'checkpoint_ssd300.pth.tar'
+    filename = 'checkpoint_ssd300_imgaug.pth.tar'
     torch.save(state, './ckpt/' + filename)
     # If this checkpoint is the best so far, store a copy so it doesn't get overwritten by a worse checkpoint
     if is_best:
