@@ -1,5 +1,5 @@
 from utils import *
-from datasets import PascalVOCDataset, ThermalDepthDataset
+from datasets import ThermalDepthDataset
 from tqdm import tqdm
 from pprint import PrettyPrinter
 
@@ -52,6 +52,7 @@ def evaluate(test_loader, model):
     with torch.no_grad():
         # Batches
         for i, (images, boxes, labels, difficulties) in enumerate(tqdm(test_loader, desc='Evaluating')):
+
             images = images.to(device)  # (N, 3, 300, 300)
 
             # Forward prop.
