@@ -1,7 +1,8 @@
-from torchvision import transforms
+import os
+import random
 import torchvision.transforms.functional as FT
 import torch
-from utils import *
+from utils import rev_label_map, label_color_map, resize
 from PIL import Image, ImageDraw, ImageFont
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
