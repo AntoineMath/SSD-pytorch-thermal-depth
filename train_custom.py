@@ -1,4 +1,5 @@
 import time
+import argparse
 import torch.backends.cudnn as cudnn
 import torch.optim
 import torch.utils.data
@@ -7,6 +8,13 @@ from torch.utils.tensorboard import SummaryWriter
 from model import SSD300, MultiBoxLoss
 from datasets import ThermalDepthDataset
 from utils import *
+
+parser = argparse.ArgumentParser()
+parser.add_argument("-s", "--suffix", help="suffix added at the end of training records (weights and tensorboard)", type=str)
+args = parser.parse_args()
+tb = SummaryWriter()
+if args.suffix:
+    tb = SummaryWriter(comment='_' + args.suffix)
 
 # Data parameters
 data_folder = './'  # folder with data files
@@ -18,7 +26,7 @@ keep_difficult = True  # use objects considered difficult to detect?
 n_classes = len(label_map)  # number of different types of objects
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Learning parameters
-checkpoint = 'ckpt/checkpoint_ssd300_imgaug.pth.tar'  # path to model checkpoint, None if none
+checkpoint = None  # path to model checkpoint, None if none
 batch_size = 16  # batch size
 start_epoch = 0  # start at this epoch
 epochs = 10000  # number of epochs to run without early-stopping
@@ -30,7 +38,7 @@ lr = 1e-3  # learning rate
 momentum = 0.9  # momentum
 weight_decay = 5e-4  # weight decay
 grad_clip = None  # clip if gradients are exploding, which may happen at larger batch sizes (sometimes at 32) - you will recognize it by a sorting error in the MuliBox loss calculation
-tb = SummaryWriter(comment='series_1-32')
+
 cudnn.benchmark = True
 
 
@@ -89,7 +97,7 @@ def main():
     """
     Training and validation.
     """
-    global epochs_since_improvement, start_epoch, label_map, best_loss, epoch, checkpoint
+    global epochs_since_improvement, start_epoch, label_map, best_loss, epoch, checkpoint, args
 
     # Initialize model or load checkpoint
     if checkpoint is None:
@@ -165,16 +173,16 @@ def main():
         if not is_best:
             epochs_since_improvement += 1
             print("\nEpochs since last improvement: %d\n" % (epochs_since_improvement,))
-            # TODO corriger l'earlystopping qui s'active immediatement lors du charment du checkpoint
             # Earlystopping
-            #if epochs_since_improvement > 50:
-                #break
+            if epochs_since_improvement > 50:
+                print("\n***Early stopping (no improvement after 50 epochs)***")
+                break
 
         else:
             epochs_since_improvement = 0
 
         # Save checkpoint
-        save_checkpoint(epoch, epochs_since_improvement, model, optimizer, val_loss, best_loss, is_best)
+        save_checkpoint(epoch, epochs_since_improvement, model, optimizer, val_loss, best_loss, is_best, suffix=args.suffix)
     tb.close()
 
 
