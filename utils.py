@@ -775,10 +775,11 @@ def thermal_depth_image_preprocessing(image, split, bbox=None):
 def data_augmentation(image, bbox=None):
     augmenters = [iaa.Crop(percent=(0, 0.2)),
                   iaa.Affine(rotate=(-30, 30)),
-                  #iaa.AdditiveGaussianNoise(scale=0.05 * np.max(image[0])),
+                  # iaa.AdditiveGaussianNoise(scale=0.05 * np.max(image[0])),
                   # iaa.ElasticTransformation(alpha=(0, 20.0), sigma=(4.0, 6.0)),
                   iaa.Dropout(p=(0.0, 0.1)),
-                  iaa.Fliplr(1.0)]
+                  iaa.Fliplr(1.0)
+                  ]
 
     # 50 tries (in case the silhouette is too much outside the rotated image)
     for i in range(50):
@@ -876,7 +877,7 @@ def accuracy(scores, targets, k):
     return correct_total.item() * (100.0 / batch_size)
 
 
-def save_checkpoint(epoch, epochs_since_improvement, model, optimizer, loss, best_loss, is_best):
+def save_checkpoint(epoch, epochs_since_improvement, model, optimizer, loss, best_loss, is_best, suffix=''):
     """
     Save model checkpoint.
 
@@ -887,6 +888,7 @@ def save_checkpoint(epoch, epochs_since_improvement, model, optimizer, loss, bes
     :param loss: validation loss in this epoch
     :param best_loss: best validation loss achieved so far (not necessarily in this checkpoint)
     :param is_best: is this checkpoint the best so far?
+    :param suffix: suffix added to the filename to make the comparison between trainings easier
     """
     state = {'epoch': epoch,
              'epochs_since_improvement': epochs_since_improvement,
@@ -894,7 +896,7 @@ def save_checkpoint(epoch, epochs_since_improvement, model, optimizer, loss, bes
              'best_loss': best_loss,
              'model': model,
              'optimizer': optimizer}
-    filename = 'checkpoint_ssd300_imgaug.pth.tar'
+    filename = 'ckpt_' + suffix + '.pth.tar'
     torch.save(state, './ckpt/' + filename)
     # If this checkpoint is the best so far, store a copy so it doesn't get overwritten by a worse checkpoint
     if is_best:
