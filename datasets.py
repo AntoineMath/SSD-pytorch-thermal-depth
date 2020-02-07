@@ -2,9 +2,9 @@ import torch
 from torch.utils.data import Dataset
 import json
 import os
-import numpy as np
 from PIL import Image
-from utils import transform, thermal_depth_image_preprocessing
+from utils import thermal_depth_image_preprocessing
+import torchvision.transforms.functional as FT
 
 
 class ThermalDepthDataset(Dataset):
@@ -38,6 +38,8 @@ class ThermalDepthDataset(Dataset):
             self.objects = json.load(j)
         assert len(self.images) == len(self.objects)
 
+        self.dataset_mean, self.dataset_std = self.dataset_mean_std()
+
     def __getitem__(self, i):
         # Read image
         #image = np.load(self.images[i])
@@ -55,8 +57,13 @@ class ThermalDepthDataset(Dataset):
             difficulties = difficulties[1-difficulties]
 
         # Apply transformation
-        image, boxes = thermal_depth_image_preprocessing(image, split=self.split, bbox=boxes)
+        image, boxes = thermal_depth_image_preprocessing(image,
+                                                         self.dataset_mean,
+                                                         self.dataset_std,
+                                                         split=self.split,
+                                                         bbox=boxes)
         #image, boxes, labels, difficulties = transform(image, boxes, labels, difficulties, split=self.split)
+        #return image, boxes, labels, difficulties
         return image.type('torch.FloatTensor'), boxes, labels, difficulties
 
     def __len__(self):
@@ -88,6 +95,26 @@ class ThermalDepthDataset(Dataset):
         images = torch.stack(images, dim=0)
 
         return images, boxes, labels, difficulties   # tensor (N, 1, 300, 300), 3 lists of N tensors each
+
+    def dataset_mean_std(self):
+
+        mean = 0
+        std = 0
+        tot_img = 0
+
+        for img in self.images:
+            img = Image.open(img, mode='r')
+            img = FT.to_tensor(img).type(torch.FloatTensor)
+            mean += img.mean()
+            std += img.std()
+            tot_img += 1
+
+        mean /= tot_img
+        std /= tot_img
+        return mean, std
+
+
+
 
 
 
