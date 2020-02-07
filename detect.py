@@ -44,7 +44,7 @@ def detect(img_path, min_score, max_overlap, top_k, suppress=None):
 
     # Move to default device
     image, _ = resize(original_image, boxes=torch.Tensor([0, 0, 0, 0]), dims=(300, 300))
-    image = FT.to_tensor(image)
+    image = FT.to_tensor(image).type(torch.FloatTensor)
     image = FT.normalize(image, mean=[image.type('torch.FloatTensor').mean()],
                              std=[image.type('torch.FloatTensor').std()])
     image = image.type('torch.FloatTensor').to(device)
@@ -116,7 +116,7 @@ if __name__ == '__main__':
     # select random
     random.shuffle(img_list)
 
-    for i in range(10):
+    for i in range(8):
         img_path = folder + 'Thermique/' + img_list[i]
-        result = detect(img_path, min_score=0.2, max_overlap=0.2, top_k=1)
+        result = detect(img_path, min_score=0.01, max_overlap=0.45, top_k=1)
         result.show()
