@@ -13,7 +13,7 @@ from imgaug.augmentables.bbs import BoundingBox, BoundingBoxesOnImage
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Label map
-voc_labels = ('lying_down', 'standing', 'sitting')
+voc_labels = ('lying_down', 'standing', 'sitting', 'fall')
 label_map = {k: v + 1 for v, k in enumerate(voc_labels)}
 label_map['background'] = 0
 rev_label_map = {v: k for k, v in label_map.items()}  # Inverse mapping
@@ -350,16 +350,6 @@ def calculate_mAP(det_boxes, det_labels, det_scores, true_boxes, true_labels, tr
                 cumul_true_positives + cumul_false_positives + 1e-10)  # (n_class_detections)
         cumul_recall = cumul_true_positives / n_easy_class_objects  # (n_class_detections)
 
-        # Render the Precision-Recall curves
-        if render:
-            plt.plot(cumul_precision.tolist(), cumul_recall.tolist())
-            # plt.xlim(0, 1)
-            # plt.ylim(0, 1)
-            plt.xlabel('Recall')
-            plt.ylabel('Precision')
-            plt.title("PR curve for '{}' class".format(rev_label_map[c]))
-            plt.show()
-
         # Find the mean of the maximum of the precisions corresponding to recalls above the threshold 't'
         recall_thresholds = torch.arange(start=0, end=1.1, step=.1).tolist()  # (11)
         precisions = torch.zeros((len(recall_thresholds)), dtype=torch.float).to(device)  # (11)
@@ -369,6 +359,17 @@ def calculate_mAP(det_boxes, det_labels, det_scores, true_boxes, true_labels, tr
                 precisions[i] = cumul_precision[recalls_above_t].max()
             else:
                 precisions[i] = 0.
+
+        # Render the Precision-Recall curves
+        if render:
+            plt.plot(precisions.tolist(), recall_thresholds)
+            # plt.xlim(0, 1)
+            # plt.ylim(0, 1)
+            plt.xlabel('Recall')
+            plt.ylabel('Precision')
+            plt.title("PR curve for '{}' class".format(rev_label_map[c]))
+            plt.show()
+
         average_precisions[c - 1] = precisions.mean()  # c is in [1, n_classes - 1]
 
     # Calculate Mean Average Precision (mAP)
@@ -475,8 +476,8 @@ def find_jaccard_overlap(set_1, set_2):
     # Find the union
     # PyTorch auto-broadcasts singleton dimensions
     union = areas_set_1.unsqueeze(1) + areas_set_2.unsqueeze(0) - intersection  # (n1, n2)
-
-    return intersection / union  # (n1, n2)
+    iou = intersection / union  # (n1, n2)
+    return iou
 
 
 # Some augmentation functions below have been adapted from
@@ -739,7 +740,7 @@ def transform(image, boxes, labels, difficulties, split):
     return new_image, new_boxes, new_labels, new_difficulties
 
 
-def thermal_depth_image_preprocessing(image, split, bbox=None):
+def thermal_depth_image_preprocessing(image, dataset_mean, dataset_std, split, bbox=None):
     '''
     Simple preprocessing for thermal images
 
@@ -750,9 +751,9 @@ def thermal_depth_image_preprocessing(image, split, bbox=None):
     image = np.expand_dims(np.array(image), axis=-1)
 
     # Standardization
-    mean = np.mean(image, axis=(0, 1))
-    std = np.std(image, axis=(0, 1))
-    new_img = (image - mean) / std
+    #mean = np.mean(image, axis=(0, 1))
+    #std = np.std(image, axis=(0, 1))
+    new_img = (image - dataset_mean.item()) / dataset_std.item()
     new_img = new_img.astype('float32')
     new_bbox = bbox
 
@@ -773,18 +774,19 @@ def thermal_depth_image_preprocessing(image, split, bbox=None):
 
 
 def data_augmentation(image, bbox=None):
-    augmenters = [iaa.Crop(percent=(0, 0.2)),
-                  iaa.Affine(rotate=(-30, 30)),
-                  # iaa.AdditiveGaussianNoise(scale=0.05 * np.max(image[0])),
-                  # iaa.ElasticTransformation(alpha=(0, 20.0), sigma=(4.0, 6.0)),
-                  iaa.Dropout(p=(0.0, 0.1)),
-                  iaa.Fliplr(1.0)
+    augmenters = [iaa.SomeOf((1, 3),
+                             [iaa.Crop(percent=(0.1, 0.2)),
+                              iaa.Affine(rotate=(-30, 30)),
+                              #iaa.AdditiveGaussianNoise(scale=0.05 * np.max(image[0])),
+                              iaa.OneOf([iaa.Dropout(p=(0.01, 0.2)),
+                                         iaa.CoarseDropout((0.03, 0.15), size_percent=(0.02, 0.05))]),
+                              iaa.Fliplr(1.0)],
+                             random_order=True)
                   ]
 
     # 50 tries (in case the silhouette is too much outside the rotated image)
     for i in range(50):
-        seq = iaa.SomeOf((0, 3), augmenters, random_order=True)
-
+        seq = iaa.Sometimes(0.8, augmenters)
         if bbox:
             image_aug, bbs_aug = seq(image=image, bounding_boxes=BoundingBox(*bbox))
 
