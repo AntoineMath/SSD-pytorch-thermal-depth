@@ -7,12 +7,13 @@ from pprint import PrettyPrinter
 pp = PrettyPrinter()
 
 # Parameters
-data_folder = './eval_data/'
+data_folder = '/home/mathurin/prudence/eval_data/13_01_2020_test/'
 keep_difficult = True  # difficult ground truth objects must always be considered in mAP calculation, because these objects DO exist!
 batch_size = 1
 workers = 0
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-checkpoint = '/home/mathurin/Documents/BEST_checkpoint_ssd300.pth.tar'
+#checkpoint = '/home/mathurin/Documents/BEST_checkpoint_ssd300.pth.tar'
+checkpoint = './ckpt/ckpt_thermal_dataset_mean_std_normalization.pth.tar'
 
 # Load model checkpoint that is to be evaluated
 checkpoint = torch.load(checkpoint, map_location=torch.device('cpu'))
@@ -61,7 +62,7 @@ def evaluate(test_loader, model):
             # Detect objects in SSD output
             det_boxes_batch, det_labels_batch, det_scores_batch = model.detect_objects(predicted_locs, predicted_scores,
                                                                                        min_score=0.2, max_overlap=0.45,
-                                                                                       top_k=200)
+                                                                                       top_k=1)
             # Evaluation MUST be at min_score=0.01, max_overlap=0.45, top_k=200 for fair comparision with the paper's results and other repos
 
             # Store this batch's results for mAP calculation
@@ -77,11 +78,16 @@ def evaluate(test_loader, model):
             true_difficulties.extend(difficulties)
 
         # Calculate mAP
-        APs, mAP = calculate_mAP(det_boxes, det_labels, det_scores, true_boxes, true_labels, true_difficulties, render=True)
+        class_precisions, class_recalls, APs, mAP = calculate_mAP(det_boxes, det_labels, det_scores, true_boxes, true_labels, true_difficulties, render=True)
 
     # Print AP for each class
-    pp.pprint(APs)
+    print('Precisions:')
+    pp.pprint(class_precisions)
+    print('\nRecalls:')
+    pp.pprint(class_recalls)
 
+    print('\nAP:')
+    pp.pprint(APs)
     print('\nMean Average Precision (mAP): %.3f' % mAP)
 
 

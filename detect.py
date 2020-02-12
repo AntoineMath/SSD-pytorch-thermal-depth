@@ -8,7 +8,8 @@ from PIL import Image, ImageDraw, ImageFont
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Load model checkpoint
-checkpoint = '/home/mathurin/Documents/BEST_checkpoint_ssd300.pth.tar'
+#checkpoint = '/home/mathurin/Documents/BEST_checkpoint_ssd300.pth.tar'
+checkpoint = './ckpt/ckpt_thermal_dataset_mean_std_normalization.pth.tar'
 checkpoint = torch.load(checkpoint)
 start_epoch = checkpoint['epoch'] + 1
 best_loss = checkpoint['best_loss']
@@ -110,13 +111,13 @@ def detect(img_path, min_score, max_overlap, top_k, suppress=None):
 
 if __name__ == '__main__':
 
-    folder = '/home/mathurin/prudence/13_01_2020_test/Serie_4/'
+    folder = '/home/mathurin/prudence/eval_data/13_01_2020_test/Serie_4/'
     img_list = os.listdir(folder + 'Thermique/')
 
     # select random
     random.shuffle(img_list)
 
-    for i in range(8):
+    for i in range(10):
         img_path = folder + 'Thermique/' + img_list[i]
-        result = detect(img_path, min_score=0.01, max_overlap=0.45, top_k=1)
+        result = detect(img_path, min_score=0.001, max_overlap=0.45, top_k=1)
         result.show()

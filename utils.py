@@ -13,7 +13,7 @@ from imgaug.augmentables.bbs import BoundingBox, BoundingBoxesOnImage
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Label map
-voc_labels = ('lying_down', 'standing', 'sitting', 'fall')
+voc_labels = ('lying_down', 'standing', 'sitting')
 label_map = {k: v + 1 for v, k in enumerate(voc_labels)}
 label_map['background'] = 0
 rev_label_map = {v: k for k, v in label_map.items()}  # Inverse mapping
@@ -37,8 +37,8 @@ def parse_annotation(annotation_path):
 
         label = object.find('name').text.lower().strip()
         # TODO : faire l'entrainement sur les 4 postures
-        if label == 'fall':
-            label = 'lying_down'
+        #if label == 'fall':
+        #    label = 'lying_down'
         if label not in label_map:
             continue
 
@@ -85,6 +85,8 @@ def create_data_lists(data_folder, output_folder, val_ratio=0.3):
     n_objects = 0
     n_objects_file = 0
     train_objects = list()
+    train_object_ctr = dict.fromkeys(rev_label_map, 0)
+
     for i, annotation in enumerate(train_annotations):
 
         # Parse annotation's XML file
@@ -95,6 +97,10 @@ def create_data_lists(data_folder, output_folder, val_ratio=0.3):
             continue
         n_objects += len(objects['labels'])
         train_objects.append(objects)
+
+        # count obj
+        for obj in objects['labels']:
+            train_object_ctr[obj] = train_object_ctr[obj] + 1
 
     print(len(train_objects), len(train_images))
     assert len(train_objects) == len(train_images)
@@ -109,6 +115,7 @@ def create_data_lists(data_folder, output_folder, val_ratio=0.3):
 
     print('\nThere are %d training images containing a total of %d objects. Files have been saved to %s.' % (
         len(train_images), n_objects, os.path.abspath(output_folder)))
+    print(train_object_ctr)
     if n_objects_file > 0:
         print(f'There are {n_objects_file} training images that contains no object (and have been ignored)')
 
@@ -117,6 +124,8 @@ def create_data_lists(data_folder, output_folder, val_ratio=0.3):
     n_objects = 0
     n_objects_file = 0
     validation_objects = list()
+    val_object_ctr = dict.fromkeys(rev_label_map, 0)
+
     for i, annotation in enumerate(validation_annotations):
 
         # Parse annotation's XML file
@@ -127,6 +136,11 @@ def create_data_lists(data_folder, output_folder, val_ratio=0.3):
             continue
         n_objects += len(objects['labels'])
         validation_objects.append(objects)
+
+        # count obj
+        for obj in objects['labels']:
+            val_object_ctr[obj] = val_object_ctr[obj] + 1
+
     assert len(validation_objects) == len(validation_images)
 
     # Save to file
@@ -139,6 +153,7 @@ def create_data_lists(data_folder, output_folder, val_ratio=0.3):
 
     print('\nThere are %d validation images containing a total of %d objects. Files have been saved to %s.' % (
         len(validation_images), n_objects, os.path.abspath(output_folder)))
+    print(val_object_ctr)
     if n_objects_file > 0:
         print(f'There are {n_objects_file} validation images that contains no object (and have been ignored)')
 
@@ -279,6 +294,9 @@ def calculate_mAP(det_boxes, det_labels, det_scores, true_boxes, true_labels, tr
 
     # Calculate APs for each class (except background)
     average_precisions = torch.zeros((n_classes - 1), dtype=torch.float)  # (n_classes - 1)
+    class_precisions = torch.zeros((n_classes - 1), dtype=torch.float)
+    class_recalls = torch.zeros((n_classes - 1), dtype=torch.float)
+
     for c in range(1, n_classes):
         # Extract only objects with this class
         true_class_images = true_images[true_labels == c]  # (n_class_objects)
@@ -307,6 +325,7 @@ def calculate_mAP(det_boxes, det_labels, det_scores, true_boxes, true_labels, tr
         # In the order of decreasing scores, check if true or false positive
         true_positives = torch.zeros((n_class_detections), dtype=torch.float).to(device)  # (n_class_detections)
         false_positives = torch.zeros((n_class_detections), dtype=torch.float).to(device)  # (n_class_detections)
+
         for d in range(n_class_detections):
             this_detection_box = det_class_boxes[d].unsqueeze(0)  # (1, 4)
             this_image = det_class_images[d]  # (), scalar
@@ -343,6 +362,10 @@ def calculate_mAP(det_boxes, det_labels, det_scores, true_boxes, true_labels, tr
             else:
                 false_positives[d] = 1
 
+        #compute overall precision and recall per class
+        class_precisions[c - 1] = true_positives.sum() / (true_positives.sum() + false_positives.sum())
+        class_recalls[c - 1] = true_positives.sum() / n_easy_class_objects
+
         # Compute cumulative precision and recall at each detection in the order of decreasing scores
         cumul_true_positives = torch.cumsum(true_positives, dim=0)  # (n_class_detections)
         cumul_false_positives = torch.cumsum(false_positives, dim=0)  # (n_class_detections)
@@ -371,14 +394,17 @@ def calculate_mAP(det_boxes, det_labels, det_scores, true_boxes, true_labels, tr
             plt.show()
 
         average_precisions[c - 1] = precisions.mean()  # c is in [1, n_classes - 1]
+        #class_precisions[c - 1] = precisions[precisions.nonzero().max()]
 
     # Calculate Mean Average Precision (mAP)
     mean_average_precision = average_precisions.mean().item()
 
     # Keep class-wise average precisions in a dictionary
+    class_precisions = {rev_label_map[c+1]: v for c, v in enumerate(class_precisions.tolist())}
+    class_recalls = {rev_label_map[c + 1]: v for c, v in enumerate(class_recalls.tolist())}
     average_precisions = {rev_label_map[c + 1]: v for c, v in enumerate(average_precisions.tolist())}
 
-    return average_precisions, mean_average_precision
+    return class_precisions, class_recalls, average_precisions, mean_average_precision,
 
 
 def xy_to_cxcy(xy):
