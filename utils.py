@@ -13,8 +13,8 @@ from imgaug.augmentables.bbs import BoundingBox, BoundingBoxesOnImage
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Label map
-voc_labels = ('lying_down', 'standing', 'sitting')
-label_map = {k: v + 1 for v, k in enumerate(voc_labels)}
+labels = ('lying_down', 'standing', 'sitting', 'fall')
+label_map = {k: v + 1 for v, k in enumerate(labels)}
 label_map['background'] = 0
 rev_label_map = {v: k for k, v in label_map.items()}  # Inverse mapping
 
@@ -105,13 +105,14 @@ def create_data_lists(data_folder, output_folder, val_ratio=0.3):
     print(len(train_objects), len(train_images))
     assert len(train_objects) == len(train_images)
 
-    # Save to file
-    with open(os.path.join(output_folder, 'TRAIN_images_test.json'), 'w') as j:
-        json.dump(train_images, j)
-    with open(os.path.join(output_folder, 'TRAIN_objects_test.json'), 'w') as j:
-        json.dump(train_objects, j)
-    with open(os.path.join(output_folder, 'label_map.json'), 'w') as j:
-        json.dump(label_map, j)  # save label map too
+    if len(train_objects) > 0:
+        # Save to file
+        with open(os.path.join(output_folder, 'TRAIN_images.json'), 'w') as j:
+            json.dump(train_images, j)
+        with open(os.path.join(output_folder, 'TRAIN_objects.json'), 'w') as j:
+            json.dump(train_objects, j)
+        with open(os.path.join(output_folder, 'label_map.json'), 'w') as j:
+            json.dump(label_map, j)  # save label map too
 
     print('\nThere are %d training images containing a total of %d objects. Files have been saved to %s.' % (
         len(train_images), n_objects, os.path.abspath(output_folder)))
@@ -143,13 +144,14 @@ def create_data_lists(data_folder, output_folder, val_ratio=0.3):
 
     assert len(validation_objects) == len(validation_images)
 
-    # Save to file
-    with open(os.path.join(output_folder, 'TEST_images_test.json'), 'w') as j:
-        json.dump(validation_images, j)
-    with open(os.path.join(output_folder, 'TEST_objects_test.json'), 'w') as j:
-        json.dump(validation_objects, j)
-    with open(os.path.join(output_folder, 'label_map.json'), 'w') as j:
-        json.dump(label_map, j)  # save label map too
+    if len(validation_objects) > 0:
+        # Save to file
+        with open(os.path.join(output_folder, 'TEST_images.json'), 'w') as j:
+            json.dump(validation_images, j)
+        with open(os.path.join(output_folder, 'TEST_objects.json'), 'w') as j:
+            json.dump(validation_objects, j)
+        with open(os.path.join(output_folder, 'label_map.json'), 'w') as j:
+            json.dump(label_map, j)  # save label map too
 
     print('\nThere are %d validation images containing a total of %d objects. Files have been saved to %s.' % (
         len(validation_images), n_objects, os.path.abspath(output_folder)))
