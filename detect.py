@@ -1,15 +1,23 @@
 import os
 import random
+import argparse
 import torchvision.transforms.functional as FT
 import torch
 from utils import rev_label_map, label_color_map, resize
 from PIL import Image, ImageDraw, ImageFont
 
+parser = argparse.ArgumentParser()
+parser.add_argument("test_data", type=str, help="path to the dataset which must contain Thermal and Thermal_8bit folders")
+parser.add_argument("checkpoint", type=str, help="path to the weights file")
+parser.add_argument("-n", "--nb_detect", type=int, help="number of detections shown on screen")
+parser.add_argument('-k', "--top_k", type=int, default=1, help="show the best k detections per image")
+args = parser.parse_args()
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Load model checkpoint
 #checkpoint = '/home/mathurin/Documents/BEST_checkpoint_ssd300.pth.tar'
-checkpoint = './ckpt/ckpt_thermal_dataset_mean_std_normalization.pth.tar'
+checkpoint = args.checkpoint
 checkpoint = torch.load(checkpoint)
 start_epoch = checkpoint['epoch'] + 1
 best_loss = checkpoint['best_loss']
@@ -17,12 +25,6 @@ print('\nLoaded checkpoint from epoch %d. Best loss so far is %.3f.\n' % (start_
 model = checkpoint['model']
 model = model.to(device)
 model.eval()
-
-# Transforms
-#resize = transforms.Resize((300, 300))
-#to_tensor = transforms.ToTensor()
-#normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-#                                 std=[0.229, 0.224, 0.225])
 
 
 def detect(img_path, min_score, max_overlap, top_k, suppress=None):
@@ -111,13 +113,16 @@ def detect(img_path, min_score, max_overlap, top_k, suppress=None):
 
 if __name__ == '__main__':
 
-    folder = '/home/mathurin/prudence/eval_data/13_01_2020_test/Serie_4/'
-    img_list = os.listdir(folder + 'Thermique/')
+    #folder = '/home/mathurin/prudence/eval_data_thermal/13_01_2020_test/Serie_4/'
+    #folder = '/home/mathurin/prudence/eval_data_thermal/Serie_4/Serie_4/'
+    folder = args.test_data
+    img_list = os.listdir(os.path.join(folder, 'Thermique'))
 
     # select random
     random.shuffle(img_list)
+    nb_detect = args.nb_detect if args.nb_detect else len(img_list)
 
-    for i in range(10):
-        img_path = folder + 'Thermique/' + img_list[i]
-        result = detect(img_path, min_score=0.001, max_overlap=0.45, top_k=1)
+    for i in range(nb_detect):
+        img_path = os.path.join(folder,  'Thermique', img_list[i])
+        result = detect(img_path, min_score=0.001, max_overlap=0.45, top_k=args.top_k)
         result.show()
