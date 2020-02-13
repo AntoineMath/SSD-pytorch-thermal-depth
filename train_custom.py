@@ -10,14 +10,16 @@ from datasets import ThermalDepthDataset
 from utils import *
 
 parser = argparse.ArgumentParser()
+parser.add_argument("data_folder", help="folder containing the 4 json datafiles", type=str)
 parser.add_argument("-s", "--suffix", help="suffix added at the end of training records (weights and tensorboard)", type=str)
+parser.add_argument("-c", "--checkpoint", help="checkpoint weights file .pth.tar to train at that ckpt", type=str)
 args = parser.parse_args()
 tb = SummaryWriter()
 if args.suffix:
     tb = SummaryWriter(comment='_' + args.suffix)
 
 # Data parameters
-data_folder = './'  # folder with data files
+data_folder = args.data_folder  # folder with data files
 
 keep_difficult = True  # use objects considered difficult to detect?
 
@@ -26,7 +28,7 @@ keep_difficult = True  # use objects considered difficult to detect?
 n_classes = len(label_map)  # number of different types of objects
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Learning parameters
-checkpoint = None  # path to model checkpoint, None if none
+checkpoint = args.checkpoint  # path to model checkpoint, None if none
 batch_size = 16  # batch size
 start_epoch = 0  # start at this epoch
 epochs = 10000  # number of epochs to run without early-stopping
@@ -40,57 +42,6 @@ weight_decay = 5e-4  # weight decay
 grad_clip = None  # clip if gradients are exploding, which may happen at larger batch sizes (sometimes at 32) - you will recognize it by a sorting error in the MuliBox loss calculation
 
 cudnn.benchmark = True
-
-
-def validate(val_loader, model, criterion):
-    """
-    One epoch's validation.
-
-    :param val_loader: DataLoader for validation data
-    :param model: model
-    :param criterion: MultiBox loss
-    :return: average validation loss
-    """
-    model.eval()  # eval mode disables dropout
-
-    batch_time = AverageMeter()
-    losses = AverageMeter()
-
-    start = time.time()
-
-    # Prohibit gradient computation explicity because I had some problems with memory
-    with torch.no_grad():
-        # Batches
-        for i, (images, boxes, labels, difficulties) in enumerate(val_loader):
-
-            # Move to default device
-            images = images.to(device)  # (N, 1, 300, 300)
-            boxes = [b.to(device) for b in boxes]
-            labels = [l.to(device) for l in labels]
-
-            # Forward prop.
-            predicted_locs, predicted_scores = model(images)  # (N, 8732, 4), (N, 8732, n_classes)
-
-            # Loss
-            loss = criterion(predicted_locs, predicted_scores, boxes, labels)
-            tb.add_scalar('Val_loss', loss, epoch)
-
-            losses.update(loss.item(), images.size(0))
-            batch_time.update(time.time() - start)
-
-            start = time.time()
-
-            # Print status
-            if i % print_freq == 0:
-                print('[{0}/{1}]\t'
-                      'Batch Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                      'Loss {loss.val:.4f} ({loss.avg:.4f})\t'.format(i, len(val_loader),
-                                                                      batch_time=batch_time,
-                                                                      loss=losses))
-
-    print('\n * LOSS - {loss.avg:.3f}\n'.format(loss=losses))
-
-    return losses.avg
 
 
 def main():
@@ -207,7 +158,6 @@ def train(train_loader, model, criterion, optimizer, epoch):
     for i, (images, boxes, labels, difficulties) in enumerate(train_loader):
         data_time.update(time.time() - start)
 
-
         # Move to default device
         images = images.to(device)  # (batch_size (N), 1, 300, 300)
         boxes = [b.to(device) for b in boxes]
@@ -245,6 +195,57 @@ def train(train_loader, model, criterion, optimizer, epoch):
                                                                   data_time=data_time, loss=losses))
 
     del predicted_locs, predicted_scores, images, boxes, labels  # free some memory since their histories may be stored
+
+
+def validate(val_loader, model, criterion):
+    """
+    One epoch's validation.
+
+    :param val_loader: DataLoader for validation data
+    :param model: model
+    :param criterion: MultiBox loss
+    :return: average validation loss
+    """
+    model.eval()  # eval mode disables dropout
+
+    batch_time = AverageMeter()
+    losses = AverageMeter()
+
+    start = time.time()
+
+    # Prohibit gradient computation explicity because I had some problems with memory
+    with torch.no_grad():
+        # Batches
+        for i, (images, boxes, labels, difficulties) in enumerate(val_loader):
+
+            # Move to default device
+            images = images.to(device)  # (N, 1, 300, 300)
+            boxes = [b.to(device) for b in boxes]
+            labels = [l.to(device) for l in labels]
+
+            # Forward prop.
+            predicted_locs, predicted_scores = model(images)  # (N, 8732, 4), (N, 8732, n_classes)
+
+            # Loss
+            loss = criterion(predicted_locs, predicted_scores, boxes, labels)
+            tb.add_scalar('Val_loss', loss, epoch)
+
+            losses.update(loss.item(), images.size(0))
+            batch_time.update(time.time() - start)
+
+            start = time.time()
+
+            # Print status
+            if i % print_freq == 0:
+                print('[{0}/{1}]\t'
+                      'Batch Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                      'Loss {loss.val:.4f} ({loss.avg:.4f})\t'.format(i, len(val_loader),
+                                                                      batch_time=batch_time,
+                                                                      loss=losses))
+
+    print('\n * LOSS - {loss.avg:.3f}\n'.format(loss=losses))
+
+    return losses.avg
 
 
 if __name__ == '__main__':
