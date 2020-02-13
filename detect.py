@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 parser = argparse.ArgumentParser()
 parser.add_argument("test_data", type=str, help="path to the dataset which must contain Thermal and Thermal_8bit folders")
-parser.add_argument("checkpoint", type=str, help="path to the weights file")
+parser.add_argument("weights", type=str, help="path to the weights.pth.tar file")
 parser.add_argument("-n", "--nb_detect", type=int, help="number of detections shown on screen")
 parser.add_argument('-k', "--top_k", type=int, default=1, help="show the best k detections per image")
 args = parser.parse_args()
@@ -41,9 +41,6 @@ def detect(img_path, min_score, max_overlap, top_k, suppress=None):
 
     # Transform
     original_image = Image.open(img_path)
-    image = FT.to_tensor(original_image)
-
-
 
     # Move to default device
     image, _ = resize(original_image, boxes=torch.Tensor([0, 0, 0, 0]), dims=(300, 300))
