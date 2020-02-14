@@ -6,7 +6,7 @@ import torch.utils.data
 import torchvision
 from torch.utils.tensorboard import SummaryWriter
 from model import SSD300, MultiBoxLoss
-from datasets import ThermalDepthDataset
+from datasets import ThermalDataset
 from utils import *
 
 parser = argparse.ArgumentParser()
@@ -28,7 +28,7 @@ keep_difficult = True  # use objects considered difficult to detect?
 n_classes = len(label_map)  # number of different types of objects
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Learning parameters
-checkpoint = args.weights  # path to model checkpoint, None if none
+checkpoint = args.checkpoint  # path to model checkpoint, None if none
 batch_size = 16  # batch size
 start_epoch = 0  # start at this epoch
 epochs = 10000  # number of epochs to run without early-stopping
@@ -79,10 +79,10 @@ def main():
     criterion = MultiBoxLoss(priors_cxcy=model.priors_cxcy).to(device)
 
     # Custom dataloaders
-    train_dataset = ThermalDepthDataset(data_folder,
+    train_dataset = ThermalDataset(data_folder,
                                      split='train',
                                      keep_difficult=keep_difficult)
-    val_dataset = ThermalDepthDataset(data_folder,
+    val_dataset = ThermalDataset(data_folder,
                                    split='test',
                                    keep_difficult=keep_difficult)
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
