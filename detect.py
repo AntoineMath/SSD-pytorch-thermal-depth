@@ -9,15 +9,20 @@ from PIL import Image, ImageDraw, ImageFont
 parser = argparse.ArgumentParser()
 parser.add_argument("test_data", type=str, help="path to the dataset which must contain Thermal and Thermal_8bit folders")
 parser.add_argument("weights", type=str, help="path to the weights.pth.tar file")
-parser.add_argument("-n", "--nb_detect", type=int, help="number of detections shown on screen")
+parser.add_argument("nb_detect", help="number of detections shown on screen. Must be either a positive integer or 'all'")
 parser.add_argument('-k', "--top_k", type=int, default=1, help="show the best k detections per image")
 args = parser.parse_args()
+
+try:
+    assert int(args.nb_detect) > 0, "nb_detect must be a positive integer or 'all'"
+except ValueError:
+    assert args.nb_detect == 'all', "nb_detect must be a positive integer or 'all'"
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Load model checkpoint
 #checkpoint = '/home/mathurin/Documents/BEST_checkpoint_ssd300.pth.tar'
-checkpoint = args.checkpoint
+checkpoint = args.weights
 checkpoint = torch.load(checkpoint)
 start_epoch = checkpoint['epoch'] + 1
 best_loss = checkpoint['best_loss']
@@ -117,9 +122,12 @@ if __name__ == '__main__':
 
     # select random
     random.shuffle(img_list)
-    nb_detect = args.nb_detect if args.nb_detect else len(img_list)
+
+    nb_detect = len(img_list) if args.nb_detect in ['all', 'a'] else int(args.nb_detect)
 
     for i in range(nb_detect):
         img_path = os.path.join(folder,  'Thermique', img_list[i])
         result = detect(img_path, min_score=0.001, max_overlap=0.45, top_k=args.top_k)
         result.show()
+        input('Press Enter to detect next image')
+
