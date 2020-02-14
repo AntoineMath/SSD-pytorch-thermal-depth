@@ -1,5 +1,5 @@
 from utils import *
-from datasets import ThermalDepthDataset
+from datasets import ThermalDataset
 from tqdm import tqdm
 from pprint import PrettyPrinter
 import argparse
@@ -35,7 +35,7 @@ model = model.to(device)
 model.eval()
 
 # Load test data
-test_dataset = ThermalDepthDataset(args.test_folder,
+test_dataset = ThermalDataset(args.test_folder,
                                    split='test',
                                    keep_difficult=keep_difficult)
 test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False,

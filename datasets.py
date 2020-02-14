@@ -3,11 +3,11 @@ from torch.utils.data import Dataset
 import json
 import os
 from PIL import Image
-from utils import thermal_depth_image_preprocessing
+from utils import thermal_image_preprocessing
 import torchvision.transforms.functional as FT
 
 
-class ThermalDepthDataset(Dataset):
+class ThermalDataset(Dataset):
     """
     A pytorch Dataset class to be used in a Pytorch Dataloader to create bacthes.
     """
@@ -32,9 +32,9 @@ class ThermalDepthDataset(Dataset):
         self.keep_difficult = keep_difficult
 
         # Read data files
-        with open(os.path.join(data_folder, self.split + '_images_test.json'), 'r') as j:
+        with open(os.path.join(data_folder, self.split + '_images.json'), 'r') as j:
             self.images = json.load(j)
-        with open(os.path.join(data_folder, self.split + '_objects_test.json'), 'r') as j:
+        with open(os.path.join(data_folder, self.split + '_objects.json'), 'r') as j:
             self.objects = json.load(j)
         assert len(self.images) == len(self.objects)
 
@@ -57,7 +57,7 @@ class ThermalDepthDataset(Dataset):
             difficulties = difficulties[1-difficulties]
 
         # Apply transformation
-        image, boxes = thermal_depth_image_preprocessing(image,
+        image, boxes = thermal_image_preprocessing(image,
                                                          self.dataset_mean,
                                                          self.dataset_std,
                                                          split=self.split,

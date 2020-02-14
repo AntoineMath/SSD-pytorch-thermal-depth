@@ -768,7 +768,7 @@ def transform(image, boxes, labels, difficulties, split):
     return new_image, new_boxes, new_labels, new_difficulties
 
 
-def thermal_depth_image_preprocessing(image, dataset_mean, dataset_std, split, bbox=None):
+def thermal_image_preprocessing(image, dataset_mean, dataset_std, split, bbox=None):
     '''
     Simple preprocessing for thermal images
 
