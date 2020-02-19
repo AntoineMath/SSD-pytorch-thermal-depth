@@ -1,8 +1,10 @@
-from utils import *
-from datasets import ThermalDataset
 from tqdm import tqdm
 from pprint import PrettyPrinter
 import argparse
+import torch
+from utils import calculate_mAP
+from datasets import ThermalDataset
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument("test_folder", type=str, help="path to the folder containing the .json datafiles")
@@ -17,13 +19,12 @@ args = parser.parse_args()
 pp = PrettyPrinter()
 
 # Parameters
+mean_std = [27970.5, 188.4542]
 data_folder = args.test_folder
 keep_difficult = True  # difficult ground truth objects must always be considered in mAP calculation, because these objects DO exist!
 batch_size = 1
-workers = 0
+workers = 4
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-#checkpoint = '/home/mathurin/Documents/BEST_checkpoint_ssd300.pth.tar'
-#checkpoint = './ckpt/ckpt_thermal_dataset_mean_std_normalization.pth.tar'
 checkpoint = args.weights
 
 # Load model checkpoint that is to be evaluated
@@ -35,9 +36,7 @@ model = model.to(device)
 model.eval()
 
 # Load test data
-test_dataset = ThermalDataset(args.test_folder,
-                                   split='test',
-                                   keep_difficult=keep_difficult)
+test_dataset = ThermalDataset(args.test_folder, split='test', mean_std=mean_std, keep_difficult=keep_difficult)
 test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False,
                                           collate_fn=test_dataset.collate_fn, num_workers=workers, pin_memory=True)
 
@@ -48,6 +47,10 @@ def evaluate(test_loader, model, min_score, max_overlap, top_k, render):
 
     :param test_loader: DataLoader for test data
     :param model: model
+    :param min_score: min_score to consider a detection
+    :param max_overlap: maximum overlapping between 2 objects to consider both objects. If it exceeds, only 1 object.
+    :param top_k: to keep the top k prediction in the image
+    :param render: if True, render the PR curves
     """
 
     # Make sure it's in eval mode
@@ -71,8 +74,10 @@ def evaluate(test_loader, model, min_score, max_overlap, top_k, render):
             predicted_locs, predicted_scores = model(images)
 
             # Detect objects in SSD output
-            det_boxes_batch, det_labels_batch, det_scores_batch = model.detect_objects(predicted_locs, predicted_scores,
-                                                                                       min_score=min_score, max_overlap=max_overlap,
+            det_boxes_batch, det_labels_batch, det_scores_batch = model.detect_objects(predicted_locs,
+                                                                                       predicted_scores,
+                                                                                       min_score=min_score,
+                                                                                       max_overlap=max_overlap,
                                                                                        top_k=top_k)
             # Evaluation MUST be at min_score=0.01, max_overlap=0.45, top_k=200 for fair comparision with the paper's results and other repos
 
@@ -89,7 +94,8 @@ def evaluate(test_loader, model, min_score, max_overlap, top_k, render):
             true_difficulties.extend(difficulties)
 
         # Calculate mAP
-        class_precisions, class_recalls, APs, mAP = calculate_mAP(det_boxes, det_labels, det_scores, true_boxes, true_labels, true_difficulties, render=render)
+        class_precisions, class_recalls, APs, mAP = calculate_mAP(det_boxes, det_labels, det_scores, true_boxes,
+                                                                  true_labels, true_difficulties, render=render)
 
     # Print AP for each class
     print('Precisions:')
@@ -103,4 +109,4 @@ def evaluate(test_loader, model, min_score, max_overlap, top_k, render):
 
 
 if __name__ == '__main__':
-    evaluate(test_loader, model, args.min_score, args.max_overlap, args.top_k, args.render is not None)
+    evaluate(test_loader, model, args.min_score, args.max_overlap, args.top_k, args.render)
