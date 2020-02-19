@@ -3,7 +3,7 @@ from torch.utils.data import Dataset
 import json
 import os
 from PIL import Image
-from utils import thermal_image_preprocessing
+from utils import thermal_image_preprocessing, convert_16bit_to_8bit
 import torchvision.transforms.functional as FT
 
 
@@ -11,7 +11,7 @@ class ThermalDataset(Dataset):
     """
     A pytorch Dataset class to be used in a Pytorch Dataloader to create bacthes.
     """
-    def __init__(self, data_folder, split, keep_difficult=False):
+    def __init__(self, data_folder, split, mean_std=None, keep_difficult=False):
         """
         :param data_folder: folder where data files are stored following this path:
         .
@@ -38,7 +38,11 @@ class ThermalDataset(Dataset):
             self.objects = json.load(j)
         assert len(self.images) == len(self.objects)
 
-        self.dataset_mean, self.dataset_std = self.dataset_mean_std()
+        if mean_std:
+            self.dataset_mean = torch.as_tensor(mean_std[0]).type('torch.FloatTensor')
+            self.dataset_std = torch.as_tensor(mean_std[1]).type('torch.FloatTensor')
+        else:
+            self.dataset_mean, self.dataset_std = self.dataset_mean_std()
 
     def __getitem__(self, i):
         # Read image
@@ -58,10 +62,10 @@ class ThermalDataset(Dataset):
 
         # Apply transformation
         image, boxes = thermal_image_preprocessing(image,
-                                                         self.dataset_mean,
-                                                         self.dataset_std,
-                                                         split=self.split,
-                                                         bbox=boxes)
+                                                   self.dataset_mean,
+                                                   self.dataset_std,
+                                                   split=self.split,
+                                                   bbox=boxes)
         #image, boxes, labels, difficulties = transform(image, boxes, labels, difficulties, split=self.split)
         #return image, boxes, labels, difficulties
         return image.type('torch.FloatTensor'), boxes, labels, difficulties
@@ -112,6 +116,49 @@ class ThermalDataset(Dataset):
         mean /= tot_img
         std /= tot_img
         return mean, std
+
+
+class DetectDataset(Dataset):
+    """
+    A pytorch Dataset class to be used in a Pytorch Dataloader to load test examples.
+    """
+    def __init__(self, data_folder, mean, std):
+        """
+        :param data_folder: folder where data files are stored following this path:
+        .
+        |-- Thermique (of the fusion of the depth-thermal image)
+            |-- thermal1.png
+             -- thermal2.png
+        |-- Thermique_8bit
+            |-- thermal1.png
+             -- fusion2.png
+        :param mean: mean of the original train dataset (used for image standardization)
+        :param std: standard deviation of the original train dataset (used for images standardization)
+        """
+
+        self.data_folder = data_folder
+        self.mean = torch.as_tensor(mean).type('torch.FloatTensor')
+        self.std = torch.as_tensor(std).type('torch.FloatTensor')
+        self.images = [os.path.join(data_folder, img) for img in os.listdir(data_folder)]
+
+    def __getitem__(self, i):
+        # Read image
+        image = Image.open(self.images[i], mode='r')
+        original_width = image.width
+        original_height = image.height
+
+        image_8bit = convert_16bit_to_8bit(self.images[i])
+
+        # Apply transformation to the 16 bit image
+        image = thermal_image_preprocessing(image,
+                                            split='detect',
+                                            mean=self.mean,
+                                            std=self.std)
+
+        return image.type('torch.FloatTensor'), image_8bit, original_width, original_height
+
+    def __len__(self):
+        return len(self.images)
 
 
 
