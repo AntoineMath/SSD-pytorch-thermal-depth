@@ -9,6 +9,7 @@ import torchvision.transforms.functional as FT
 import matplotlib.pyplot as plt
 from imgaug import augmenters as iaa
 from imgaug.augmentables.bbs import BoundingBox, BoundingBoxesOnImage
+from PIL import Image
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -768,11 +769,13 @@ def transform(image, boxes, labels, difficulties, split):
     return new_image, new_boxes, new_labels, new_difficulties
 
 
-def thermal_image_preprocessing(image, dataset_mean, dataset_std, split, bbox=None):
+def thermal_image_preprocessing(image, mean, std, split, bbox=None):
     '''
     Simple preprocessing for thermal images
 
     :param image: array image (h, w, c)
+    :param mean: tensor of shape (1,)
+    :param std: tensor of shape (1,)
     :param bbox: box coordinates of the object in the image (TODO : allow mutliple boxes)
     :return: torch tensor of shape (2, w, h) and float32 type
     '''
@@ -781,7 +784,7 @@ def thermal_image_preprocessing(image, dataset_mean, dataset_std, split, bbox=No
     # Standardization
     #mean = np.mean(image, axis=(0, 1))
     #std = np.std(image, axis=(0, 1))
-    new_img = (image - dataset_mean.item()) / dataset_std.item()
+    new_img = (image - mean.item()) / std.item()
     new_img = new_img.astype('float32')
     new_bbox = bbox
 
@@ -824,6 +827,53 @@ def data_augmentation(image, bbox=None):
                 break
 
     return image_aug, (bbs_clipped.x1, bbs_clipped.y1, bbs_clipped.x2, bbs_clipped.y2)
+
+
+def convert_16bit_to_8bit(img_16bit):
+    """
+
+    :param img_16bit: 16 bit image
+    :return: 8 bit image that can be shown easily
+    """
+    img = Image.open(img_16bit)
+    img = np.array(img)
+
+    def bytescaling(data, cmin=None, cmax=None, high=255, low=0):
+        """
+        Converting the input image to uint8 dtype and scaling
+        the range to ``(low, high)`` (default 0-255). If the input image already has
+        dtype uint8, no scaling is done.
+        :param data: 16-bit image data array
+        :param cmin: bias scaling of small values (def: data.min())
+        :param cmax: bias scaling of large values (def: data.max())
+        :param high: scale max value to high. (def: 255)
+        :param low: scale min value to low. (def: 0)
+        :return: 8-bit image data array
+        """
+        if data.dtype == np.uint8:
+            return data
+
+        if high > 255:
+            high = 255
+        if low < 0:
+            low = 0
+        if high < low:
+            raise ValueError("`high` should be greater than or equal to `low`.")
+
+        if cmin is None:
+            cmin = data.min()
+        if cmax is None:
+            cmax = data.max()
+
+        cscale = cmax - cmin
+        if cscale == 0:
+            cscale = 1
+
+        scale = float(high - low) / cscale
+        bytedata = (data - cmin) * scale + low
+        return (bytedata.clip(low, high) + 0.5).astype(np.uint8)
+
+    return bytescaling(img)
 
 
 def transform_custom(image, boxes, labels, difficulties, split):
