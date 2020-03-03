@@ -8,13 +8,13 @@ import torchvision
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-class VGGBase(nn.Module):
+class VGGBase_pre_merge(nn.Module):
     """
     VGG base convolutions to produce lower-level feature maps.
     """
 
     def __init__(self):
-        super(VGGBase, self).__init__()
+        super(VGGBase_pre_merge, self).__init__()
 
         # Standard convolutional layers in VGG16
         self.conv1_1 = nn.Conv2d(1, 64, kernel_size=3, padding=1)  # stride = 1, by default
@@ -29,24 +29,7 @@ class VGGBase(nn.Module):
         self.conv3_2 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
         self.conv3_3 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
         self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2, ceil_mode=True)  # ceiling (not floor) here for even dims
-
-        self.conv4_1 = nn.Conv2d(256, 512, kernel_size=3, padding=1)
-        self.conv4_2 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
-        self.conv4_3 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
-        self.pool4 = nn.MaxPool2d(kernel_size=2, stride=2)
-
-        self.conv5_1 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
-        self.conv5_2 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
-        self.conv5_3 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
-        self.pool5 = nn.MaxPool2d(kernel_size=3, stride=1, padding=1)  # retains size because stride is 1 (and padding)
-
-        # Replacements for FC6 and FC7 in VGG16
-        self.conv6 = nn.Conv2d(512, 1024, kernel_size=3, padding=6, dilation=6)  # atrous convolution
-
-        self.conv7 = nn.Conv2d(1024, 1024, kernel_size=1)
-
-        # Load pretrained layers
-        #self.load_pretrained_layers()
+        
 
     def forward(self, image):
         """
@@ -67,8 +50,87 @@ class VGGBase(nn.Module):
         out = F.relu(self.conv3_2(out))  # (N, 256, 75, 75)
         out = F.relu(self.conv3_3(out))  # (N, 256, 75, 75)
         out = self.pool3(out)  # (N, 256, 38, 38), it would have been 37 if not for ceil_mode = True
+        pool3_feats = out 
 
-        out = F.relu(self.conv4_1(out))  # (N, 512, 38, 38)
+        return pool3_feats
+
+    def load_pretrained_layers(self):
+        """
+        As in the paper, we use a VGG-16 pretrained on the ImageNet task as the base network.
+        There's one available in PyTorch, see https://pytorch.org/docs/stable/torchvision/models.html#torchvision.models.vgg16
+        We copy these parameters into our network. It's straightforward for conv1 to conv5.
+        However, the original VGG-16 does not contain the conv6 and con7 layers.
+        Therefore, we convert fc6 and fc7 into convolutional layers, and subsample by decimation. See 'decimate' in utils.py.
+        """
+        # Current state of base
+        state_dict = self.state_dict()
+        param_names = list(state_dict.keys())
+
+        # Pretrained VGG base
+        pretrained_state_dict = torchvision.models.vgg16(pretrained=True).state_dict()
+        pretrained_param_names = list(pretrained_state_dict.keys())
+
+        # Transfer conv. parameters from pretrained model to current model
+        for i, param in enumerate(param_names[:-4]):  # excluding conv6 and conv7 parameters
+            state_dict[param] = pretrained_state_dict[pretrained_param_names[i]]
+
+        # Convert fc6, fc7 to convolutional layers, and subsample (by decimation) to sizes of conv6 and conv7
+        # fc6
+        conv_fc6_weight = pretrained_state_dict['classifier.0.weight'].view(4096, 512, 7, 7)  # (4096, 512, 7, 7)
+        conv_fc6_bias = pretrained_state_dict['classifier.0.bias']  # (4096)
+        state_dict['conv6.weight'] = decimate(conv_fc6_weight, m=[4, None, 3, 3])  # (1024, 512, 3, 3)
+        state_dict['conv6.bias'] = decimate(conv_fc6_bias, m=[4])  # (1024)
+        # fc7
+        conv_fc7_weight = pretrained_state_dict['classifier.3.weight'].view(4096, 4096, 1, 1)  # (4096, 4096, 1, 1)
+        conv_fc7_bias = pretrained_state_dict['classifier.3.bias']  # (4096)
+        state_dict['conv7.weight'] = decimate(conv_fc7_weight, m=[4, 4, None, None])  # (1024, 1024, 1, 1)
+        state_dict['conv7.bias'] = decimate(conv_fc7_bias, m=[4])  # (1024)
+
+        # Note: an FC layer of size (K) operating on a flattened version (C*H*W) of a 2D image of size (C, H, W)...
+        # ...is equivalent to a convolutional layer with kernel size (H, W), input channels C, output channels K...
+        # ...operating on the 2D image of size (C, H, W) without padding
+
+        self.load_state_dict(state_dict)
+
+        print("\nLoaded base model.\n")
+
+
+class VGGBase_after_merge(nn.Module):
+    """
+    VGG base convolutions to produce lower-level feature maps.
+    """
+
+    def __init__(self):
+        super(VGGBase_after_merge, self).__init__()
+
+        # Standard convolutional layers in VGG16
+        self.conv4_1 = nn.Conv2d(256, 512, kernel_size=3, padding=1)
+        self.conv4_2 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
+        self.conv4_3 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
+        self.pool4 = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        self.conv5_1 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
+        self.conv5_2 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
+        self.conv5_3 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
+        self.pool5 = nn.MaxPool2d(kernel_size=3, stride=1, padding=1)  # retains size because stride is 1 (and padding)
+
+        # Replacements for FC6 and FC7 in VGG16
+        self.conv6 = nn.Conv2d(512, 1024, kernel_size=3, padding=6, dilation=6)  # atrous convolution
+
+        self.conv7 = nn.Conv2d(1024, 1024, kernel_size=1)
+
+        # Load pretrained layers
+        #self.load_pretrained_layers()
+
+    def forward(self, pool3_merged_feats):
+        """
+        Forward propagation.
+
+        :param image: images, a tensor of dimensions (N, 3, 300, 300)
+        :return: lower-level feature maps conv4_3 and conv7
+        """
+
+        out = F.relu(self.conv4_1(pool3_merged_feats))  # (N, 512, 38, 38)
         out = F.relu(self.conv4_2(out))  # (N, 512, 38, 38)
         out = F.relu(self.conv4_3(out))  # (N, 512, 38, 38)
         conv4_3_feats = out  # (N, 512, 38, 38)
@@ -330,7 +392,8 @@ class SSD300(nn.Module):
 
         self.n_classes = n_classes
 
-        self.base = VGGBase()
+        self.base_pre_merge = VGGBase_pre_merge()
+        self.base_after_merge = VGGBase_after_merge()
         self.aux_convs = AuxiliaryConvolutions()
         self.pred_convs = PredictionConvolutions(n_classes)
 
@@ -342,20 +405,26 @@ class SSD300(nn.Module):
         # Prior boxes
         self.priors_cxcy = self.create_prior_boxes()
 
-    def forward(self, image):
+    def forward(self, thermal_image, depth_image):
         """
         Forward propagation.
 
         :param image: images, a tensor of dimensions (N, 3, 300, 300)
         :return: 8732 locations and class scores (i.e. w.r.t each prior box) for each image
         """
-        # Run VGG base network convolutions (lower level feature map generators)
-        conv4_3_feats, conv7_feats = self.base(image)  # (N, 512, 38, 38), (N, 1024, 19, 19)
+        # Run VGG base_pre_merge network convolutions (lower level feature map generators) and merge the two branches
+        pool3_thermal_feats = self.base_pre_merge(thermal_image)  # (N, 256, 38, 38)
+        pool3_depth_feats = self.base_after_merge(thermal_image)  # (N, 256, 38, 38)
+        pool3_merged = torch.cat((pool3_thermal_feats, pool3_depth_feats), axis=1)  # (N, 512, 38, 38)
+
+        # Run the base_after_merge network on the merged features
+        conv4_3_feats, conv7_feats = self.base_after_merge(pool3_merged)
 
         # Rescale conv4_3 after L2 norm
         norm = conv4_3_feats.pow(2).sum(dim=1, keepdim=True).sqrt()  # (N, 1, 38, 38)
         conv4_3_feats = conv4_3_feats / norm  # (N, 512, 38, 38)
         conv4_3_feats = conv4_3_feats * self.rescale_factors  # (N, 512, 38, 38)
+
         # (PyTorch autobroadcasts singleton dimensions during arithmetic)
 
         # Run auxiliary convolutions (higher level feature map generators)

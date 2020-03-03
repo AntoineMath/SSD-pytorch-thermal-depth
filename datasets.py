@@ -7,7 +7,7 @@ from utils import thermal_image_preprocessing, convert_16bit_to_8bit
 import torchvision.transforms.functional as FT
 
 
-class ThermalDataset(Dataset):
+class ThermalDepth(Dataset):
     """
     A pytorch Dataset class to be used in a Pytorch Dataloader to create bacthes.
     """
@@ -15,12 +15,15 @@ class ThermalDataset(Dataset):
         """
         :param data_folder: folder where data files are stored following this path:
         .
-        |-- Arrays (of the fusion of the depth-thermal image)
-            |-- fusion1.npy
-             -- fusion2.npy
+        |-- Thermal (of the fusion of the depth-thermal image)
+            |-- thermal1.png
+             -- thermal2.png
+        |-- Depth
+            |-- depth1.png
+             -- depth2.png
         |-- Annotations
-            |-- fusion1.xml
-             -- fusion2.xml
+            |-- thermal1.xml
+             -- thermal2.xml
         :param split: split, one of 'TRAIN' or 'TEST'
         :param keep_difficult: keep or discard objects that are considered difficult to detect.
         """
