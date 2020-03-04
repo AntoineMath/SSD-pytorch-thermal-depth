@@ -5,7 +5,7 @@ from torchvision import transforms
 import torch
 from utils import rev_label_map, label_color_map, resize
 from PIL import Image, ImageDraw, ImageFont
-from datasets import DetectDataset
+from datasets import DetectDataset, ThermalDataset
 
 parser = argparse.ArgumentParser()
 parser.add_argument("test_data", type=str, help="path to the dataset which must contain Thermal and Thermal_8bit folders")
@@ -24,7 +24,10 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Load model checkpoint
 
 #TODO: simplifier le processus de standardization
-detect_dataset = DetectDataset(args.test_data, mean=27970.5, std=188.4542)
+training_set = ThermalDataset(".", split='train')
+mean, std = training_set.dataset_mean, training_set.dataset_std
+
+detect_dataset = DetectDataset(args.test_data, mean=mean, std=std)
 detect_loader = torch.utils.data.DataLoader(detect_dataset, batch_size=1, shuffle=True)
 
 checkpoint = args.weights
@@ -74,7 +77,11 @@ def detect(detect_loader, min_score, max_overlap, top_k, suppress=None):
         # If no objects found, the detected labels will be set to ['0.'], i.e. ['background'] in SSD300.detect_objects() in model.py
         if det_labels == ['background']:
             # Just return original image
-            return image_8bit
+            image_8bit.show()
+            print('background')
+            input('Press Enter to detect next image')
+            continue
+
 
         # Annotate
         annotated_image = image_8bit
@@ -108,6 +115,7 @@ def detect(detect_loader, min_score, max_overlap, top_k, suppress=None):
                       font=font)
         del draw
         annotated_image.show()
+        print('score:', det_scores[i].item())
         input('Press Enter to detect next image')
 
 
