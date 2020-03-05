@@ -782,17 +782,18 @@ def thermal_image_preprocessing(image, mean, std, split, bbox=None):
     image = np.expand_dims(np.array(image), axis=-1)
 
     # Standardization
-    #mean = np.mean(image, axis=(0, 1))
-    #std = np.std(image, axis=(0, 1))
     new_img = (image - mean.item()) / std.item()
     new_img = new_img.astype('float32')
     new_bbox = bbox
-
+    #print(new_bbox)
     if split == 'TRAIN':
-        new_img, new_bbox = data_augmentation(new_img, bbox.squeeze().tolist())
-        new_bbox = torch.FloatTensor(new_bbox).unsqueeze(0)
+        new_img, new_bbox = data_augmentation(new_img, bbox)
+        boxes = []
+        for nb in new_bbox.bounding_boxes:
+            boxes.append([nb.x1, nb.y1, nb.x2, nb.y2])
+        new_bbox = torch.FloatTensor(boxes)
 
-    # Reshape to (2, 300, 300)
+    # Reshape to (1, 300, 300)
     new_img = skimage.transform.resize(new_img, (300, 300))
     new_img = np.moveaxis(new_img, -1, 0)
     new_img = torch.FloatTensor(new_img)
@@ -805,28 +806,36 @@ def thermal_image_preprocessing(image, mean, std, split, bbox=None):
 
 
 def data_augmentation(image, bbox=None):
+    list_box = []
+    for box in bbox.tolist():
+        list_box.append(BoundingBox(*box))
+    bbs = BoundingBoxesOnImage(list_box, shape=image.shape)
+
     augmenters = [iaa.SomeOf((1, 3),
                              [iaa.Crop(percent=(0.1, 0.2)),
-                              iaa.Affine(rotate=(-30, 30)),
+                              #iaa.Affine(rotate=(-30, 30)),
                               #iaa.AdditiveGaussianNoise(scale=0.05 * np.max(image[0])),
                               iaa.OneOf([iaa.Dropout(p=(0.01, 0.2)),
                                          iaa.CoarseDropout((0.03, 0.15), size_percent=(0.02, 0.05))]),
                               iaa.Fliplr(1.0)],
                              random_order=True)
                   ]
-
-    # 50 tries (in case the silhouette is too much outside the rotated image)
     for i in range(50):
         seq = iaa.Sometimes(0.8, augmenters)
-        if bbox:
-            image_aug, bbs_aug = seq(image=image, bounding_boxes=BoundingBox(*bbox))
-
-            bbs_clipped = bbs_aug.clip_out_of_image(image_aug)
-            # Si on crop plus de 20% d'une bbox lors du clip_out_of_image(), on recommence.
-            if bbs_clipped.area / bbs_aug.area > 0.8:
+        if bbs:
+            image_aug, bbs_aug = seq(image=image, bounding_boxes=bbs)
+            wrong_boxes = 0
+            for bb in bbs_aug.bounding_boxes:
+                bb_cliped_area = bb.clip_out_of_image(image_aug).area
+                bb_area = bb.area
+                # Si on crop plus de 20% d'une bbox lors du clip_out_of_image(), on recommence.
+                if bb_cliped_area / bb_area < 0.8:
+                    wrong_boxes += 1
+            if wrong_boxes == 0:
+                bbs_aug = bbs_aug.clip_out_of_image()
                 break
 
-    return image_aug, (bbs_clipped.x1, bbs_clipped.y1, bbs_clipped.x2, bbs_clipped.y2)
+    return image_aug, bbs_aug
 
 
 def convert_16bit_to_8bit(img_16bit):
