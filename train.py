@@ -125,8 +125,8 @@ def main():
             epochs_since_improvement += 1
             print("\nEpochs since last improvement: %d\n" % (epochs_since_improvement,))
             # Earlystopping
-            if epochs_since_improvement > 50:
-                print("\n***Early stopping (no improvement after 50 epochs)***")
+            if epochs_since_improvement > 20:
+                print("\n***Early stopping (no improvement after 20 epochs)***")
                 break
 
         else:
