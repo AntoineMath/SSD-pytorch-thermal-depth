@@ -14,17 +14,9 @@ parser.add_argument("weights", type=str, help="path to the weights.pth.tar file"
 parser.add_argument('-k', "--top_k", type=int, default=1, help="show the best k detections per image")
 args = parser.parse_args()
 
-#try:
-#    assert int(args.nb_detect) > 0, "nb_detect must be a positive integer or 'all'"
-#except ValueError:
-#    assert args.nb_detect == 'all', "nb_detect must be a positive integer or 'all'"
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Load model checkpoint
-
-#TODO: simplifier le processus de standardization
-training_set = ThermalDataset(".", split='train')
+training_set = ThermalDataset("/home/mathurin/prudence/datasets/dataset_mix2", split='train')
 mean, std = training_set.dataset_mean, training_set.dataset_std
 
 detect_dataset = DetectDataset(args.test_data, mean=mean, std=std)
