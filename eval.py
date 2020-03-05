@@ -19,7 +19,7 @@ args = parser.parse_args()
 pp = PrettyPrinter()
 
 # Parameters
-training_set = ThermalDataset(".", split='train')
+training_set = ThermalDataset("/home/mathurin/prudence/datasets/dataset_mix2", split='train')
 mean, std = training_set.dataset_mean, training_set.dataset_std
 data_folder = args.test_folder
 keep_difficult = True  # difficult ground truth objects must always be considered in mAP calculation, because these objects DO exist!
