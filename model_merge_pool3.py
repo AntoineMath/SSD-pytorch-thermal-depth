@@ -8,13 +8,13 @@ import torchvision
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-class VGGBase_pre_merge_thermal(nn.Module):
+class VGGBasePreMergeThermal(nn.Module):
     """
     VGG base convolutions to produce lower-level feature maps.
     """
 
     def __init__(self):
-        super(VGGBase_pre_merge_thermal, self).__init__()
+        super(VGGBasePreMergeThermal, self).__init__()
 
         # Standard convolutional layers in VGG16
         self.conv1_1 = nn.Conv2d(1, 64, kernel_size=3, padding=1)  # stride = 1, by default
@@ -29,7 +29,6 @@ class VGGBase_pre_merge_thermal(nn.Module):
         self.conv3_2 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
         self.conv3_3 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
         self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2, ceil_mode=True)  # ceiling (not floor) here for even dims
-        
 
     def forward(self, image):
         """
@@ -95,13 +94,13 @@ class VGGBase_pre_merge_thermal(nn.Module):
         print("\nLoaded base model.\n")
 
 
-class VGGBase_pre_merge_depth(nn.Module):
+class VGGBasePreMergeDepth(nn.Module):
     """
     VGG base convolutions to produce lower-level feature maps.
     """
 
     def __init__(self):
-        super(VGGBase_pre_merge_depth, self).__init__()
+        super(VGGBasePreMergeDepth, self).__init__()
 
         # Standard convolutional layers in VGG16
         self.conv1_1 = nn.Conv2d(1, 64, kernel_size=3, padding=1)  # stride = 1, by default
@@ -181,13 +180,13 @@ class VGGBase_pre_merge_depth(nn.Module):
         print("\nLoaded base model.\n")
 
 
-class VGGBase_after_merge(nn.Module):
+class VGGBaseAfterMerge(nn.Module):
     """
     VGG base convolutions to produce lower-level feature maps.
     """
 
     def __init__(self):
-        super(VGGBase_after_merge, self).__init__()
+        super(VGGBaseAfterMerge, self).__init__()
 
         # Standard convolutional layers in VGG16
         self.conv4_1 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
@@ -478,9 +477,9 @@ class SSD300(nn.Module):
 
         self.n_classes = n_classes
 
-        self.base_pre_merge_thermal = VGGBase_pre_merge_thermal()
-        self.base_pre_merge_depth = VGGBase_pre_merge_depth()
-        self.base_after_merge = VGGBase_after_merge()
+        self.base_pre_merge_thermal = VGGBasePreMergeThermal()
+        self.base_pre_merge_depth = VGGBasePreMerge_depth()
+        self.base_after_merge = VGGBaseAfterMerge()
         self.aux_convs = AuxiliaryConvolutions()
         self.pred_convs = PredictionConvolutions(n_classes)
 
