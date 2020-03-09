@@ -3,11 +3,11 @@ from torch.utils.data import Dataset
 import json
 import os
 from PIL import Image
-from utils import thermal_image_preprocessing, convert_16bit_to_8bit
+from utils import thermal_image_preprocessing, transform, convert_16bit_to_8bit
 import torchvision.transforms.functional as FT
 
 
-class ThermalDepth(Dataset):
+class ThermalDepthDataset(Dataset):
     """
     A pytorch Dataset class to be used in a Pytorch Dataloader to create bacthes.
     """
@@ -36,21 +36,22 @@ class ThermalDepth(Dataset):
 
         # Read data files
         with open(os.path.join(data_folder, self.split + '_images.json'), 'r') as j:
-            self.images = json.load(j)
+            self.thermal_images = json.load(j)
         with open(os.path.join(data_folder, self.split + '_objects.json'), 'r') as j:
             self.objects = json.load(j)
-        assert len(self.images) == len(self.objects)
+        assert len(self.thermal_images) == len(self.objects)
 
-        if mean_std:
-            self.dataset_mean = torch.as_tensor(mean_std[0]).type('torch.FloatTensor')
-            self.dataset_std = torch.as_tensor(mean_std[1]).type('torch.FloatTensor')
-        else:
-            self.dataset_mean, self.dataset_std = self.dataset_mean_std()
+        self.depth_images = [img.replace('Thermique', 'Profondeur').replace('thermal', 'depth') for img in self.thermal_images]
+        assert len(self.thermal_images) == len(self.depth_images)
+
+        # compute the mean and std of the dataset
+        self.dataset_mean, self.dataset_std = self.dataset_mean_std()
 
     def __getitem__(self, i):
         # Read image
-        #image = np.load(self.images[i])
-        image = Image.open(self.images[i], mode='r')
+        thermal_image = Image.open(self.thermal_images[i], mode='r')
+        depth_image = Image.open(self.depth_images[i], mode='r')
+
         # Read objects in this image (bounding boxes, labels, difficulties)
         objects = self.objects[i]
         boxes = torch.FloatTensor(objects['boxes'])  # (n_objects, 4)
@@ -64,17 +65,18 @@ class ThermalDepth(Dataset):
             difficulties = difficulties[1-difficulties]
 
         # Apply transformation
-        image, boxes = thermal_image_preprocessing(image,
-                                                   self.dataset_mean,
-                                                   self.dataset_std,
-                                                   split=self.split,
-                                                   bbox=boxes)
-        #image, boxes, labels, difficulties = transform(image, boxes, labels, difficulties, split=self.split)
-        #return image, boxes, labels, difficulties
-        return image.type('torch.FloatTensor'), boxes, labels, difficulties
+        thermal_image, depth_image, boxes, labels, difficulties = transform(thermal_image, depth_image,
+                                                                            split=self.split,
+                                                                            boxes=boxes,
+                                                                            labels=labels,
+                                                                            difficulties=difficulties,
+                                                                            mean=self.dataset_mean,
+                                                                            std=self.dataset_std)
+
+        return thermal_image, depth_image, boxes, labels, difficulties
 
     def __len__(self):
-        return len(self.images)
+        return len(self.thermal_images)
 
     def collate_fn(self, batch):
         """
@@ -88,37 +90,52 @@ class ThermalDepth(Dataset):
         :return: a tensor of images, lists of varying-size tensors of bounding boxes, labels, and difficulties
         """
 
-        images = list()
+        thermal_images = list()
+        depth_images = list()
         boxes = list()
         labels = list()
         difficulties = list()
 
         for b in batch:
-            images.append(b[0])
-            boxes.append(b[1])
-            labels.append(b[2])
-            difficulties.append(b[3])
+            thermal_images.append(b[0])
+            depth_images.append(b[1])
+            boxes.append(b[2])
+            labels.append(b[3])
+            difficulties.append(b[4])
 
-        images = torch.stack(images, dim=0)
+        thermal_images = torch.stack(thermal_images, dim=0)
+        depth_images = torch.stack(depth_images, dim=0)
 
-        return images, boxes, labels, difficulties   # tensor (N, 1, 300, 300), 3 lists of N tensors each
+        return thermal_images, depth_images, boxes, labels, difficulties   # tensors (N, 1, 300, 300), 3 lists of N tensors each
 
     def dataset_mean_std(self):
-
-        mean = 0
-        std = 0
+        # thermal mean_std
+        mean_thermal = 0
+        std_thermal = 0
         tot_img = 0
-
-        for img in self.images:
+        for img in self.thermal_images:
             img = Image.open(img, mode='r')
             img = FT.to_tensor(img).type(torch.FloatTensor)
-            mean += img.mean()
-            std += img.std()
+            mean_thermal += img.mean()
+            std_thermal += img.std()
             tot_img += 1
+        mean_thermal /= tot_img
+        std_thermal /= tot_img
 
-        mean /= tot_img
-        std /= tot_img
-        return mean, std
+        # depth mean_std
+        mean_depth = 0
+        std_depth = 0
+        tot_img = 0
+        for img in self.depth_images:
+            img = Image.open(img, mode='r')
+            img = FT.to_tensor(img).type(torch.FloatTensor)
+            mean_depth += img.mean()
+            std_depth += img.std()
+            tot_img += 1
+        mean_depth /= tot_img
+        std_depth /= tot_img
+
+        return [mean_thermal, mean_depth], [std_thermal, std_depth]
 
 
 class DetectDataset(Dataset):

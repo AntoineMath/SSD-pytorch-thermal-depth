@@ -6,6 +6,7 @@ import numpy as np
 import skimage
 import xml.etree.ElementTree as ET
 import torchvision.transforms.functional as FT
+import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from imgaug import augmenters as iaa
 from imgaug.augmentables.bbs import BoundingBox, BoundingBoxesOnImage
@@ -551,22 +552,27 @@ def expand(image, boxes, filler):
     return new_image, new_boxes
 
 
-def random_crop(image, boxes, labels, difficulties):
+def random_crop(thermal_img, depth_img, boxes, labels, difficulties):
     """
     Performs a random crop in the manner stated in the paper. Helps to learn to detect larger and partial objects.
 
     Note that some objects may be cut out entirely.
+    Note that all operations on bbox are based on the thermal image only.
 
     Adapted from https://github.com/amdegroot/ssd.pytorch/blob/master/utils/augmentations.py
 
-    :param image: image, a tensor of dimensions (3, original_h, original_w)
+    :param thermal_img: image, a tensor of dimensions (1, original_h, original_w)
+    :param depth_img: image, a tensor of dimensions(1, original_h, original_w)
     :param boxes: bounding boxes in boundary coordinates, a tensor of dimensions (n_objects, 4)
     :param labels: labels of objects, a tensor of dimensions (n_objects)
     :param difficulties: difficulties of detection of these objects, a tensor of dimensions (n_objects)
-    :return: cropped image, updated bounding box coordinates, updated labels, updated difficulties
+    :return: cropped thermal_img, cropped_depth_img, updated bounding box coordinates, updated labels, updated difficulties
     """
-    original_h = image.size(1)
-    original_w = image.size(2)
+    ratio_h = int(depth_img.size(1) / thermal_img.size(1))
+    ratio_w = int(depth_img.size(2) / thermal_img.size(2))
+
+    original_h = thermal_img.size(1)
+    original_w = thermal_img.size(2)
     # Keep choosing a minimum overlap until a successful crop is made
     while True:
         # Randomly draw the value for minimum overlap
@@ -574,7 +580,7 @@ def random_crop(image, boxes, labels, difficulties):
 
         # If not cropping
         if min_overlap is None:
-            return image, boxes, labels, difficulties
+            return thermal_img, depth_img, boxes, labels, difficulties
 
         # Try up to 50 times for this choice of minimum overlap
         # This isn't mentioned in the paper, of course, but 50 is chosen in paper authors' original Caffe repo
@@ -610,7 +616,8 @@ def random_crop(image, boxes, labels, difficulties):
                 continue
 
             # Crop image
-            new_image = image[:, top:bottom, left:right]  # (3, new_h, new_w)
+            new_thermal_img = thermal_img[:, top:bottom, left:right]  # (3, new_h, new_w)
+            new_depth_img = depth_img[:, top*ratio_h:bottom*ratio_h, left*ratio_w:right*ratio_w]  # (3, new_h, new_w)
 
             # Find centers of original bounding boxes
             bb_centers = (boxes[:, :2] + boxes[:, 2:]) / 2.  # (n_objects, 2)
@@ -634,52 +641,57 @@ def random_crop(image, boxes, labels, difficulties):
             new_boxes[:, 2:] = torch.min(new_boxes[:, 2:], crop[2:])  # crop[2:] is [right, bottom]
             new_boxes[:, 2:] -= crop[:2]
 
-            return new_image, new_boxes, new_labels, new_difficulties
+            return new_thermal_img, new_depth_img, new_boxes, new_labels, new_difficulties
 
 
-def flip(image, boxes):
+def flip(thermal_img, depth_img, boxes):
     """
     Flip image horizontally.
 
-    :param image: image, a PIL Image
+    :param thermal_img: float Tensor
+    :param depth_img: float Tensor
     :param boxes: bounding boxes in boundary coordinates, a tensor of dimensions (n_objects, 4)
     :return: flipped image, updated bounding box coordinates
     """
-    # Flip image
-    new_image = FT.hflip(image)
+    # Flip image horizontaly
+    new_thermal_img = thermal_img.flip([0, 2])
+    new_depth_img = depth_img.flip([0,2])
 
     # Flip boxes
     new_boxes = boxes
-    new_boxes[:, 0] = image.width - boxes[:, 0] - 1
-    new_boxes[:, 2] = image.width - boxes[:, 2] - 1
+    new_boxes[:, 0] = thermal_img.shape[-1] - boxes[:, 0] - 1
+    new_boxes[:, 2] = thermal_img.shape[-1] - boxes[:, 2] - 1
     new_boxes = new_boxes[:, [2, 1, 0, 3]]
 
-    return new_image, new_boxes
+    return new_thermal_img, new_depth_img, new_boxes
 
 
-def resize(image, boxes, dims=(300, 300), return_percent_coords=True):
+def resize(image, boxes=None, dims=300, return_percent_coords=True):
     """
     Resize image. For the SSD300, resize to (300, 300).
 
     Since percent/fractional coordinates are calculated for the bounding boxes (w.r.t image dimensions) in this process,
     you may choose to retain them.
 
-    :param image: image, a PIL Image
+    :param image: image, float Tensor
     :param boxes: bounding boxes in boundary coordinates, a tensor of dimensions (n_objects, 4)
     :return: resized image, updated bounding box coordinates (or fractional coordinates, in which case they remain the same)
     """
-    # Resize image
-    new_image = FT.resize(image, dims)
+    # Resize image, need to be of shape (batch, c, h, w)
+    new_image = F.interpolate(image.unsqueeze(0), size=dims).squeeze(0) #
 
     # Resize bounding boxes
-    old_dims = torch.FloatTensor([image.width, image.height, image.width, image.height]).unsqueeze(0)
-    new_boxes = boxes / old_dims  # percent coordinates
+    if boxes is not None:
+        old_dims = torch.FloatTensor([image.shape[2], image.shape[1], image.shape[2], image.shape[1]]).unsqueeze(0)
+        new_boxes = boxes / old_dims  # percent coordinates
 
-    if not return_percent_coords:
-        new_dims = torch.FloatTensor([dims[1], dims[0], dims[1], dims[0]]).unsqueeze(0)
-        new_boxes = new_boxes * new_dims
+        if not return_percent_coords:
+            new_dims = torch.FloatTensor([dims[1], dims[0], dims[1], dims[0]]).unsqueeze(0)
+            new_boxes = new_boxes * new_dims
 
-    return new_image, new_boxes
+        return new_image, new_boxes
+
+    return new_image
 
 
 def photometric_distort(image):
@@ -713,7 +725,7 @@ def photometric_distort(image):
     return new_image
 
 
-def transform(image, boxes, labels, difficulties, split):
+def transform(thermal_img, depth_img, boxes, labels, difficulties, split, mean, std):
     """
     Apply the transformations above.
 
@@ -726,47 +738,38 @@ def transform(image, boxes, labels, difficulties, split):
     """
     assert split in {'TRAIN', 'TEST'}
 
-    # Mean and standard deviation of ImageNet data that our base VGG from torchvision was trained on
-    # see: https://pytorch.org/docs/stable/torchvision/models.html
-
-    new_image = image
+    new_thermal_img = thermal_img
+    new_depth_img = depth_img
     new_boxes = boxes
     new_labels = labels
     new_difficulties = difficulties
+
+    # Convert PIL image to torch Tensor
+    new_thermal_img = FT.to_tensor(new_thermal_img).type(torch.FloatTensor)
+    new_depth_img = FT.to_tensor(new_depth_img).type(torch.FloatTensor)
+
     # Skip the following operations if validation/evaluation
     if split == 'TRAIN':
-        # A series of photometric distortions in random order, each with 50% chance of occurrence, as in Caffe repo
-        #new_image = photometric_distort(new_image)
-
-        # Convert PIL image to Torch tensor
-        new_image = FT.to_tensor(new_image)
-
-        # Expand image (zoom out) with a 50% chance - helpful for training detection of small objects
-        # Fill surrounding space with the mean of ImageNet data that our base VGG was trained on
-        #if random.random() < 0.5:
-        #    new_image, new_boxes = expand(new_image, boxes, 0)
-
         # Randomly crop image (zoom in)
-        new_image, new_boxes, new_labels, new_difficulties = random_crop(new_image, new_boxes, new_labels,
-                                                                         new_difficulties)
-
-        # Convert Torch tensor to PIL image
-        new_image = FT.to_pil_image(new_image)
+        new_thermal_img, new_depth_img, new_boxes, new_labels, new_difficulties = random_crop(new_thermal_img,
+                                                                                              new_depth_img,
+                                                                                              new_boxes,
+                                                                                              new_labels,
+                                                                                              new_difficulties)
 
         # Flip image with a 50% chance
         if random.random() < 0.5:
-            new_image, new_boxes = flip(new_image, new_boxes)
+            new_thermal_img, new_depth_img, new_boxes = flip(new_thermal_img, new_depth_img, new_boxes)
+
+    # Standardization by substracting mean and dividing by standard deviation of the training_set
+    new_thermal_img = (new_thermal_img - mean[0]) / std[0]
+    new_depth_img = (new_depth_img - mean[1]) / std[1]
 
     # Resize image to (300, 300) - this also converts absolute boundary coordinates to their fractional form
-    new_image, new_boxes = resize(new_image, new_boxes, dims=(300, 300))
+    new_thermal_img, new_boxes = resize(new_thermal_img, new_boxes, dims=(300, 300))
+    new_depth_img = resize(new_depth_img, dims=(300, 300))
 
-    # Convert PIL image to Torch tensor
-    new_image = FT.to_tensor(new_image)
-
-    # Normalize by mean and standard deviation of ImageNet data that our base VGG was trained on
-    new_image = FT.normalize(new_image, mean=[new_image.type('torch.FloatTensor').mean()], std=[new_image.type('torch.FloatTensor').std()])
-
-    return new_image, new_boxes, new_labels, new_difficulties
+    return new_thermal_img, new_depth_img, new_boxes, new_labels, new_difficulties
 
 
 def thermal_image_preprocessing(image, mean, std, split, bbox=None):

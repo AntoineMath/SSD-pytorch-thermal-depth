@@ -6,7 +6,7 @@ import torch.utils.data
 import torchvision
 from torch.utils.tensorboard import SummaryWriter
 from model import SSD300, MultiBoxLoss
-from datasets import ThermalDataset
+from datasets import ThermalDepthDataset
 from utils import *
 
 parser = argparse.ArgumentParser()
@@ -79,10 +79,10 @@ def main():
     criterion = MultiBoxLoss(priors_cxcy=model.priors_cxcy).to(device)
 
     # Custom dataloaders
-    train_dataset = ThermalDataset(data_folder,
+    train_dataset = ThermalDepthDataset(data_folder,
                                      split='train',
                                      keep_difficult=keep_difficult)
-    val_dataset = ThermalDataset(data_folder,
+    val_dataset = ThermalDepthDataset(data_folder,
                                    split='test',
                                    keep_difficult=keep_difficult)
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
@@ -155,16 +155,17 @@ def train(train_loader, model, criterion, optimizer, epoch):
     start = time.time()
 
     # Batches
-    for i, (images, boxes, labels, difficulties) in enumerate(train_loader):
+    for i, (thermal_images, depth_images, boxes, labels, difficulties) in enumerate(train_loader):
         data_time.update(time.time() - start)
 
         # Move to default device
-        images = images.to(device)  # (batch_size (N), 1, 300, 300)
+        thermal_images = thermal_images.to(device)  # (N, 1, 300, 300)
+        depth_images = depth_images.to(device)  # (N, 1, 300, 300)
         boxes = [b.to(device) for b in boxes]
         labels = [l.to(device) for l in labels]
 
         # Forward prop.
-        predicted_locs, predicted_scores = model(images)  # (N, 8732, 4), (N, 8732, n_classes)
+        predicted_locs, predicted_scores = model(thermal_images, depth_images)  # (N, 8732, 4), (N, 8732, n_classes)
 
         # Loss
         loss = criterion(predicted_locs, predicted_scores, boxes, labels)  # scalar
@@ -180,7 +181,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
         # Update model
         optimizer.step()
 
-        losses.update(loss.item(), images.size(0))
+        losses.update(loss.item(), thermal_images.size(0))
         batch_time.update(time.time() - start)
 
         start = time.time()
@@ -194,7 +195,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
                                                                   batch_time=batch_time,
                                                                   data_time=data_time, loss=losses))
 
-    del predicted_locs, predicted_scores, images, boxes, labels  # free some memory since their histories may be stored
+    del predicted_locs, predicted_scores, thermal_images, depth_images, boxes, labels  # free some memory since their histories may be stored
 
 
 def validate(val_loader, model, criterion):
@@ -216,21 +217,23 @@ def validate(val_loader, model, criterion):
     # Prohibit gradient computation explicity because I had some problems with memory
     with torch.no_grad():
         # Batches
-        for i, (images, boxes, labels, difficulties) in enumerate(val_loader):
+        for i, (thermal_images, depth_images, boxes, labels, difficulties) in enumerate(val_loader):
 
             # Move to default device
-            images = images.to(device)  # (N, 1, 300, 300)
+            thermal_images = thermal_images.to(device)  # (N, 1, 300, 300)
+            depth_images = depth_images.to(device)  # (N, 1, 300, 300)
+
             boxes = [b.to(device) for b in boxes]
             labels = [l.to(device) for l in labels]
 
             # Forward prop.
-            predicted_locs, predicted_scores = model(images)  # (N, 8732, 4), (N, 8732, n_classes)
+            predicted_locs, predicted_scores = model(thermal_images, depth_images)  # (N, 8732, 4), (N, 8732, n_classes)
 
             # Loss
             loss = criterion(predicted_locs, predicted_scores, boxes, labels)
             tb.add_scalar('Val_loss', loss, epoch)
 
-            losses.update(loss.item(), images.size(0))
+            losses.update(loss.item(), thermal_images.size(0))
             batch_time.update(time.time() - start)
 
             start = time.time()

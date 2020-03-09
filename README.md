@@ -1,3 +1,7 @@
+**This is an edit of the sgrvinod SSD implementation (https://github.com/sgrvinod/a-PyTorch-Tutorial-to-Object-Detection).**  
+
+**Multiple changes has been done but the major modifications are the shape of images Thermal (300, 300, 1), the Dataloader (different dataset structure) and the preprocessing pipeline (standardization and augmentations).**
+<br/><br/>
 This is a **[PyTorch](https://pytorch.org) Tutorial to Object Detection**.
 
 This is the third in [a series of tutorials](https://github.com/sgrvinod/Deep-Tutorials-for-PyTorch) I'm writing about _implementing_ cool models on your own with the amazing PyTorch library.
@@ -29,6 +33,7 @@ I'm using `PyTorch 0.4` in `Python 3.6`.
 [***Frequently Asked Questions***](https://github.com/sgrvinod/a-PyTorch-Tutorial-to-Object-Detection#faqs)
 
 # Objective
+TODO: edit this part
 
 **To build a model that can detect and localize specific objects in images.**
 
@@ -631,14 +636,23 @@ We will need three inputs.
 
 #### Images
 
-Since we're using the SSD300 variant, the images would need to be sized at `300, 300` pixels and in the RGB format.
+Since we're using the SSD300 variant, the images would need to be sized at `300, 300`
 
-Remember, we're using a VGG-16 base pretrained on ImageNet that is already available in PyTorch's `torchvision` module. [This page](https://pytorch.org/docs/master/torchvision/models.html) details the preprocessing or transformation we would need to perform in order to use this model – pixel values must be in the range [0,1] and we must then normalize the image by the mean and standard deviation of the ImageNet images' RGB channels.
+Remember, we're using a VGG-16 base pretrained on ImageNet that is already available in PyTorch's `torchvision` module. [This page](https://pytorch.org/docs/master/torchvision/models.html) details the preprocessing or transformation we would need to perform in order to use this model – pixel values must be in the range [0,1] and we must then normalize the image by the mean and standard deviation of the training_set.
 
+##### Standardization
 ```python
-mean = [0.485, 0.456, 0.406]
-std = [0.229, 0.224, 0.225]
+from datasets import ThermalDataset
+training_set = ThermalDataset("/path/to/folder/containing/jsonfiles/", split='train')
+mean, std = training_set.dataset_mean, training_set.dataset_std
 ```
+##### Data Augmentation
+We use [imgaug](https://imgaug.readthedocs.io/en/latest/) library to perform the data augmentation. All the augmentations are made on the fly. We keep the initial dataset and at each epoch, each image (and bbox) is randomly passed through 1 to 3 consecutive transformations.
+
+List of transformations :
+- Flip
+- Crop
+- Dropout or CoarseDropout
 
 Also, PyTorch follows the NCHW convention, which means the channels dimension (C) must precede the size dimensions.
 
