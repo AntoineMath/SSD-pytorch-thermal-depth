@@ -478,7 +478,7 @@ class SSD300(nn.Module):
         self.n_classes = n_classes
 
         self.base_pre_merge_thermal = VGGBasePreMergeThermal()
-        self.base_pre_merge_depth = VGGBasePreMerge_depth()
+        self.base_pre_merge_depth = VGGBasePreMergeDepth()
         self.base_after_merge = VGGBaseAfterMerge()
         self.aux_convs = AuxiliaryConvolutions()
         self.pred_convs = PredictionConvolutions(n_classes)
