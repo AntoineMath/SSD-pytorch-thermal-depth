@@ -765,6 +765,10 @@ def transform(thermal_img, depth_img, boxes, labels, difficulties, split, mean, 
     new_thermal_img = (new_thermal_img - mean[0]) / std[0]
     new_depth_img = (new_depth_img - mean[1]) / std[1]
 
+    # Positive standardization to have pixels values [0, 1]
+    #new_thermal_img = (new_thermal_img.clamp(-1., 1.) + 1) / 2.
+    #new_depth_img = (new_depth_img.clamp(-1., 1.) + 1) / 2.
+
     # Resize image to (300, 300) - this also converts absolute boundary coordinates to their fractional form
     new_thermal_img, new_boxes = resize(new_thermal_img, new_boxes, dims=(300, 300))
     new_depth_img = resize(new_depth_img, dims=(300, 300))

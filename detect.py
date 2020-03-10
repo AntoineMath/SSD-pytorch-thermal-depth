@@ -71,7 +71,7 @@ def detect(detect_loader, min_score, max_overlap, top_k, suppress=None):
         # Decode class integer labels
         det_labels = [rev_label_map[l] for l in det_labels[0].to('cpu').tolist()]
 
-        # If no objects found, the detected labels will be set to ['0.'], i.e. ['background'] in SSD300.detect_objects() in model.py
+        # If no objects found, the detected labels will be set to ['0.'], i.e. ['background'] in SSD300.detect_objects() in model_merge_pool3.py
         if det_labels == ['background']:
             # Just return original image
             return image_8bit

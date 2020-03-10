@@ -3,7 +3,7 @@ from pprint import PrettyPrinter
 import argparse
 import torch
 from utils import calculate_mAP
-from datasets import ThermalDataset
+from datasets import ThermalDepthDataset
 
 
 parser = argparse.ArgumentParser()
@@ -19,7 +19,7 @@ args = parser.parse_args()
 pp = PrettyPrinter()
 
 # Parameters
-training_set = ThermalDataset("/home/mathurin/prudence/datasets/dataset_mix2", split='train')
+training_set = ThermalDepthDataset("../datasets/dataset_mix2", split='train')
 mean, std = training_set.dataset_mean, training_set.dataset_std
 data_folder = args.test_folder
 keep_difficult = True  # difficult ground truth objects must always be considered in mAP calculation, because these objects DO exist!
@@ -37,7 +37,7 @@ model = model.to(device)
 model.eval()
 
 # Load test data
-test_dataset = ThermalDataset(args.test_folder, split='test', mean_std=[mean, std], keep_difficult=keep_difficult)
+test_dataset = ThermalDepthDataset(args.test_folder, split='test', mean_std=[mean, std], keep_difficult=keep_difficult)
 test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False,
                                           collate_fn=test_dataset.collate_fn, num_workers=workers, pin_memory=True)
 
@@ -67,12 +67,13 @@ def evaluate(test_loader, model, min_score, max_overlap, top_k, render):
 
     with torch.no_grad():
         # Batches
-        for i, (images, boxes, labels, difficulties) in enumerate(tqdm(test_loader, desc='Evaluating')):
+        for i, (thermal_imgs, depth_imgs, boxes, labels, difficulties) in enumerate(tqdm(test_loader, desc='Evaluating')):
 
-            images = images.to(device)  # (N, 1, 300, 300)
+            thermal_imgs = thermal_imgs.to(device)  # (N, 1, 300, 300)
+            depth_imgs = depth_imgs.to(device)  # (N, 1, 300, 300)
 
             # Forward prop.
-            predicted_locs, predicted_scores = model(images)
+            predicted_locs, predicted_scores = model(thermal_imgs, depth_imgs)
 
             # Detect objects in SSD output
             det_boxes_batch, det_labels_batch, det_scores_batch = model.detect_objects(predicted_locs,
