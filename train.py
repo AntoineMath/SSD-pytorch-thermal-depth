@@ -5,7 +5,7 @@ import torch.optim
 import torch.utils.data
 import torchvision
 from torch.utils.tensorboard import SummaryWriter
-from model import SSD300, MultiBoxLoss
+from model_merge_pool1 import SSD300, MultiBoxLoss
 from datasets import ThermalDepthDataset
 from utils import *
 
@@ -14,9 +14,9 @@ parser.add_argument("data_folder", help="folder containing the 4 json datafiles"
 parser.add_argument("-s", "--suffix", help="suffix added at the end of training records (weights and tensorboard)", type=str)
 parser.add_argument("-c", "--checkpoint", help="checkpoint weights file .pth.tar to train at that ckpt", type=str)
 args = parser.parse_args()
-tb = SummaryWriter()
+writer = SummaryWriter()
 if args.suffix:
-    tb = SummaryWriter(comment='_' + args.suffix)
+    writer = SummaryWriter(comment='_' + args.suffix)
 
 # Data parameters
 data_folder = args.data_folder  # folder with data files
@@ -35,7 +35,7 @@ epochs = 10000  # number of epochs to run without early-stopping
 epochs_since_improvement = 0  # number of epochs since there was an improvement in the validation metric
 best_loss = 500.  # assume a high loss at first
 workers = 4  # number of workers for loading data in the DataLoader
-print_freq = 200  # print training or validation status every __ batches
+print_freq = 10  # print training or validation status every __ batches
 lr = 1e-3  # learning rate
 momentum = 0.9  # momentum
 weight_decay = 5e-4  # weight decay
@@ -48,7 +48,7 @@ def main():
     """
     Training and validation.
     """
-    global epochs_since_improvement, start_epoch, label_map, best_loss, epoch, checkpoint, args
+    global epochs_since_improvement, start_epoch, label_map, best_loss, epoch, checkpoint, args, writer
 
     # Initialize model or load checkpoint
     if checkpoint is None:
@@ -76,6 +76,7 @@ def main():
 
     # Move to default device
     model = model.to(device)
+
     criterion = MultiBoxLoss(priors_cxcy=model.priors_cxcy).to(device)
 
     # Custom dataloaders
@@ -91,6 +92,12 @@ def main():
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True,
                                              collate_fn=val_dataset.collate_fn, num_workers=workers,
                                              pin_memory=True)
+
+    # Writer add graph to tensorboard
+    dataiter = iter(train_loader)
+    thermal_images, depth_images, boxes, labels, difficulties = dataiter.next()
+    writer.add_graph(model, (thermal_images.to(device), depth_images.to(device)), verbose=None)
+
 
     # Epochs
     for epoch in range(start_epoch, epochs):
@@ -134,7 +141,7 @@ def main():
 
         # Save checkpoint
         save_checkpoint(epoch, epochs_since_improvement, model, optimizer, val_loss, best_loss, is_best, suffix=args.suffix)
-    tb.close()
+    writer.close()
 
 
 def train(train_loader, model, criterion, optimizer, epoch):
@@ -147,12 +154,15 @@ def train(train_loader, model, criterion, optimizer, epoch):
     :param optimizer: optimizer
     :param epoch: epoch number
     """
+    global writer
+
     model.train()  # training mode enables dropout
     batch_time = AverageMeter()  # forward prop. + back prop. time
     data_time = AverageMeter()  # data loading time
     losses = AverageMeter()  # loss
 
     start = time.time()
+
 
     # Batches
     for i, (thermal_images, depth_images, boxes, labels, difficulties) in enumerate(train_loader):
@@ -169,7 +179,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
         # Loss
         loss = criterion(predicted_locs, predicted_scores, boxes, labels)  # scalar
-        tb.add_scalar('Loss', loss, epoch)
+        writer.add_scalar('Loss', loss, epoch)
         # Backward prop.
         optimizer.zero_grad()
         loss.backward()
@@ -194,6 +204,9 @@ def train(train_loader, model, criterion, optimizer, epoch):
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'.format(epoch, i, len(train_loader),
                                                                   batch_time=batch_time,
                                                                   data_time=data_time, loss=losses))
+
+    # send to tensorboard last thermal and depth images used for the last batch
+    #img_grid = torchvision.utils.make_grid(thermal_images[-1])
 
     del predicted_locs, predicted_scores, thermal_images, depth_images, boxes, labels  # free some memory since their histories may be stored
 
@@ -231,7 +244,7 @@ def validate(val_loader, model, criterion):
 
             # Loss
             loss = criterion(predicted_locs, predicted_scores, boxes, labels)
-            tb.add_scalar('Val_loss', loss, epoch)
+            writer.add_scalar('Val_loss', loss, epoch)
 
             losses.update(loss.item(), thermal_images.size(0))
             batch_time.update(time.time() - start)
