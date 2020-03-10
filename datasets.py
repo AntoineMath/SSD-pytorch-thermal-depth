@@ -45,7 +45,10 @@ class ThermalDepthDataset(Dataset):
         assert len(self.thermal_images) == len(self.depth_images)
 
         # compute the mean and std of the dataset
-        self.dataset_mean, self.dataset_std = self.dataset_mean_std()
+        if mean_std:
+            self.dataset_mean, self.dataset_std = mean_std
+        else:
+            self.dataset_mean, self.dataset_std = self.dataset_mean_std()
 
     def __getitem__(self, i):
         # Read image
