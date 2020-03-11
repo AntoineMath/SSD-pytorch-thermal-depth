@@ -42,7 +42,7 @@ class ThermalDepthDataset(Dataset):
         assert len(self.thermal_images) == len(self.objects)
 
         self.depth_images = [img.replace('Thermique', 'Profondeur').replace('thermal', 'depth') for img in self.thermal_images]
-        assert len(self.thermal_images) == len(self.depth_images)
+        assert len(self.thermal_images) == len(self.depth_images), 'some thermal images names are not matching the depth images ones'
 
         # compute the mean and std of the dataset
         if mean_std:
