@@ -104,7 +104,7 @@ def create_data_lists(data_folder, output_folder, val_ratio=0.3):
         for obj in objects['labels']:
             train_object_ctr[obj] = train_object_ctr[obj] + 1
 
-    print(len(train_objects), len(train_images))
+    train_object_ctr = {k: v for k, v in zip(label_map.keys(), train_object_ctr.values())}
     assert len(train_objects) == len(train_images)
 
     if len(train_objects) > 0:
@@ -143,7 +143,7 @@ def create_data_lists(data_folder, output_folder, val_ratio=0.3):
         # count obj
         for obj in objects['labels']:
             val_object_ctr[obj] = val_object_ctr[obj] + 1
-
+    val_object_ctr = {k: v for k, v in zip(label_map.keys(), val_object_ctr.values())}
     assert len(validation_objects) == len(validation_images)
 
     if len(validation_objects) > 0:
