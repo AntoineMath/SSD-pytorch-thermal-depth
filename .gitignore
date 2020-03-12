@@ -7,6 +7,5 @@ TRAIN_objects_test.json
 __pycache__/
 ckpt/
 /runs
-/notebooks
 /ckpt
 create_data_lists.py
