@@ -8,24 +8,29 @@ from datasets import ThermalDataset
 
 parser = argparse.ArgumentParser()
 parser.add_argument("test_folder", type=str, help="path to the folder containing the .json datafiles")
+parser.add_argument("img_type", help="type of image to train on, either 'thermal' or 'depth'", type=str)
 parser.add_argument("weights", type=str, help="path to the weights.pth.tar file")
 parser.add_argument('--min_score', type=float, default=0.2, help="minimum score to consider a detection")
 parser.add_argument("--max_overlap", type=float, default=0.45, help="limit of overlapping beyond which we consider there is only one object")
 parser.add_argument("-k", "--top_k", type=int, default=1, help="top k possible detections you want the model makes")
 parser.add_argument("-r", "--render", action="store_true", help='activate the render of Precision-Recall curves')
 args = parser.parse_args()
+assert args.img_type in {'thermal', 'depth'}
 
 # Good formatting when printing the APs for each class and mAP
 pp = PrettyPrinter()
 
 # Parameters
-training_set = ThermalDataset("/home/mathurin/prudence/datasets/dataset_mix2", split='train')
-mean, std = training_set.dataset_mean, training_set.dataset_std
-data_folder = args.test_folder
+
+# training_set : trainingset used for the training of the weights you want evaluate.
+training_set = ThermalDataset("/home/am/work/prudence/datasets/training_sample", img_type=args.img_type, split='train')
 keep_difficult = True  # difficult ground truth objects must always be considered in mAP calculation, because these objects DO exist!
 batch_size = 1
 workers = 4
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+data_folder = args.test_folder
+mean, std = training_set.dataset_mean, training_set.dataset_std
 checkpoint = args.weights
 
 # Load model checkpoint that is to be evaluated
@@ -37,9 +42,17 @@ model = model.to(device)
 model.eval()
 
 # Load test data
-test_dataset = ThermalDataset(args.test_folder, split='test', mean_std=[mean, std], keep_difficult=keep_difficult)
-test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False,
-                                          collate_fn=test_dataset.collate_fn, num_workers=workers, pin_memory=True)
+test_dataset = ThermalDataset(args.test_folder,
+                              img_type=args.img_type,
+                              split='test',
+                              mean_std=[mean, std],
+                              keep_difficult=keep_difficult)
+test_loader = torch.utils.data.DataLoader(test_dataset,
+                                          batch_size=batch_size,
+                                          shuffle=False,
+                                          collate_fn=test_dataset.collate_fn,
+                                          num_workers=workers,
+                                          pin_memory=True)
 
 
 def evaluate(test_loader, model, min_score, max_overlap, top_k, render):
