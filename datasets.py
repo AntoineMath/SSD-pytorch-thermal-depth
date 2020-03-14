@@ -11,7 +11,7 @@ class ThermalDataset(Dataset):
     """
     A pytorch Dataset class to be used in a Pytorch Dataloader to create bacthes.
     """
-    def __init__(self, data_folder, split, mean_std=None, keep_difficult=False):
+    def __init__(self, data_folder, img_type, split, mean_std=None, keep_difficult=False):
         """
         :param data_folder: folder where data files are stored following this path:
         .
@@ -24,17 +24,19 @@ class ThermalDataset(Dataset):
         :param split: split, one of 'TRAIN' or 'TEST'
         :param keep_difficult: keep or discard objects that are considered difficult to detect.
         """
-        self.split = split.upper()
+        self.img_type = img_type
+        assert self.img_type in {'thermal', 'depth'}
 
+        self.split = split.upper()
         assert self.split in {'TRAIN', 'TEST'}
 
         self.data_folder = data_folder
         self.keep_difficult = keep_difficult
 
         # Read data files
-        with open(os.path.join(data_folder, self.split + '_images.json'), 'r') as j:
+        with open(os.path.join(data_folder, self.split + '_' + self.img_type + '_images.json'), 'r') as j:
             self.images = json.load(j)
-        with open(os.path.join(data_folder, self.split + '_objects.json'), 'r') as j:
+        with open(os.path.join(data_folder, self.split + '_' + self.img_type + '_objects.json'), 'r') as j:
             self.objects = json.load(j)
         assert len(self.images) == len(self.objects)
 
@@ -46,7 +48,6 @@ class ThermalDataset(Dataset):
 
     def __getitem__(self, i):
         # Read image
-        #image = np.load(self.images[i])
         image = Image.open(self.images[i], mode='r')
         # Read objects in this image (bounding boxes, labels, difficulties)
         objects = self.objects[i]

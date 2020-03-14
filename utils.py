@@ -37,9 +37,6 @@ def parse_annotation(annotation_path):
         difficult = int(object.find('difficult').text == '1')
 
         label = object.find('name').text.lower().strip()
-        # TODO : faire l'entrainement sur les 4 postures
-        #if label == 'fall':
-        #    label = 'lying_down'
         if label not in label_map:
             continue
 
@@ -56,19 +53,21 @@ def parse_annotation(annotation_path):
     return {'boxes': boxes, 'labels': labels, 'difficulties': difficulties}
 
 
-def create_data_lists(data_folder, output_folder, val_ratio=0.3):
+def create_data_lists(data_folder, output_folder, img_type, val_ratio=0.3):
 
     # Annotations files and train_images
     annotations = list()
     images = list()
+    annotation_folder = "Annotations" if img_type == 'thermal' else "Annotations_depth"
+    image_folder = "Thermique" if img_type == 'thermal' else "Profondeur"
     for serie in os.listdir(data_folder):
-        annotation_path = os.path.join(os.path.abspath(data_folder), serie, 'Annotations')
+        annotation_path = os.path.join(os.path.abspath(data_folder), serie, annotation_folder)
         if os.path.exists(annotation_path):
             for annotation in os.listdir(annotation_path):
 
                 annotations.append(os.path.join(annotation_path, annotation))
                 images.append(
-                    os.path.join(annotation_path.replace('Annotations', 'Thermique'), annotation.replace('xml', 'png')))
+                    os.path.join(annotation_path.replace(annotation_folder, image_folder), annotation.replace('xml', 'png')))
 
     # shuffle annotations and images
     data = list(zip(images, annotations))
@@ -108,14 +107,14 @@ def create_data_lists(data_folder, output_folder, val_ratio=0.3):
 
     if len(train_objects) > 0:
         # Save to file
-        with open(os.path.join(output_folder, 'TRAIN_images.json'), 'w') as j:
+        with open(os.path.join(output_folder, f'TRAIN_{img_type}_images.json'), 'w') as j:
             json.dump(train_images, j)
-        with open(os.path.join(output_folder, 'TRAIN_objects.json'), 'w') as j:
+        with open(os.path.join(output_folder, f'TRAIN_{img_type}_objects.json'), 'w') as j:
             json.dump(train_objects, j)
-        with open(os.path.join(output_folder, 'label_map.json'), 'w') as j:
+        with open(os.path.join(output_folder, f'label_map_{img_type}.json'), 'w') as j:
             json.dump(label_map, j)  # save label map too
 
-    print('\nThere are %d training images containing a total of %d objects. Files have been saved to %s.' % (
+    print(f'\nThere are %d training {img_type} images containing a total of %d objects. Files have been saved to %s.' % (
         len(train_images), n_objects, os.path.abspath(output_folder)))
     print(train_object_ctr)
     if n_objects_file > 0:
@@ -147,14 +146,14 @@ def create_data_lists(data_folder, output_folder, val_ratio=0.3):
 
     if len(validation_objects) > 0:
         # Save to file
-        with open(os.path.join(output_folder, 'TEST_images.json'), 'w') as j:
+        with open(os.path.join(output_folder, f'TEST_{img_type}_images.json'), 'w') as j:
             json.dump(validation_images, j)
-        with open(os.path.join(output_folder, 'TEST_objects.json'), 'w') as j:
+        with open(os.path.join(output_folder, f'TEST_{img_type}_objects.json'), 'w') as j:
             json.dump(validation_objects, j)
-        with open(os.path.join(output_folder, 'label_map.json'), 'w') as j:
+        with open(os.path.join(output_folder, f'label_map_{img_type}.json'), 'w') as j:
             json.dump(label_map, j)  # save label map too
 
-    print('\nThere are %d validation images containing a total of %d objects. Files have been saved to %s.' % (
+    print(f'\nThere are %d validation {img_type} images containing a total of %d objects. Files have been saved to %s.' % (
         len(validation_images), n_objects, os.path.abspath(output_folder)))
     print(val_object_ctr)
     if n_objects_file > 0:
@@ -700,7 +699,7 @@ def photometric_distort(image):
 
     for d in distortions:
         if random.random() < 0.5:
-            if d.__name__ is 'adjust_hue':
+            if d.__name__ == 'adjust_hue':
                 # Caffe repo uses a 'hue_delta' of 18 - we divide by 255 because PyTorch needs a normalized value
                 adjust_factor = random.uniform(-18 / 255., 18 / 255.)
             else:
@@ -966,7 +965,7 @@ def accuracy(scores, targets, k):
     return correct_total.item() * (100.0 / batch_size)
 
 
-def save_checkpoint(epoch, epochs_since_improvement, model, optimizer, loss, best_loss, is_best, suffix=''):
+def save_checkpoint(epoch, epochs_since_improvement, model, optimizer, loss, best_loss, is_best, img_type, suffix=''):
     """
     Save model checkpoint.
 
@@ -986,7 +985,8 @@ def save_checkpoint(epoch, epochs_since_improvement, model, optimizer, loss, bes
              'model': model,
              'optimizer': optimizer}
     filename = 'ckpt_' + suffix + '.pth.tar'
-    torch.save(state, './ckpt/' + filename)
+    save_path = os.path.join('ckpt', img_type, filename)
+    torch.save(state, save_path)
     # If this checkpoint is the best so far, store a copy so it doesn't get overwritten by a worse checkpoint
     if is_best:
         torch.save(state, './ckpt/BEST_' + filename)

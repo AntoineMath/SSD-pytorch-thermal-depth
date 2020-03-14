@@ -11,9 +11,13 @@ from utils import *
 
 parser = argparse.ArgumentParser()
 parser.add_argument("data_folder", help="folder containing the 4 json datafiles", type=str)
+parser.add_argument("img_type", help="type of image to train on, either 'thermal' or 'depth'", type=str)
 parser.add_argument("-s", "--suffix", help="suffix added at the end of training records (weights and tensorboard)", type=str)
 parser.add_argument("-c", "--checkpoint", help="checkpoint weights file .pth.tar to train at that ckpt", type=str)
 args = parser.parse_args()
+assert args.img_type in {'thermal', 'depth'}
+
+# Writer for Tensorboard
 tb = SummaryWriter()
 if args.suffix:
     tb = SummaryWriter(comment='_' + args.suffix)
@@ -80,11 +84,13 @@ def main():
 
     # Custom dataloaders
     train_dataset = ThermalDataset(data_folder,
-                                     split='train',
-                                     keep_difficult=keep_difficult)
-    val_dataset = ThermalDataset(data_folder,
-                                   split='test',
+                                   img_type=args.img_type,
+                                   split='train',
                                    keep_difficult=keep_difficult)
+    val_dataset = ThermalDataset(data_folder,
+                                 img_type=args.img_type,
+                                 split='test',
+                                 keep_difficult=keep_difficult)
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
                                                collate_fn=train_dataset.collate_fn, num_workers=workers,
                                                pin_memory=True)  # note that we're passing the collate function here
@@ -133,7 +139,9 @@ def main():
             epochs_since_improvement = 0
 
         # Save checkpoint
-        save_checkpoint(epoch, epochs_since_improvement, model, optimizer, val_loss, best_loss, is_best, suffix=args.suffix)
+        save_checkpoint(epoch, epochs_since_improvement, model, optimizer, val_loss, best_loss, is_best,
+                        img_type=args.img_type,
+                        suffix=args.suffix)
     tb.close()
 
 
