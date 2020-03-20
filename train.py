@@ -17,6 +17,12 @@ parser.add_argument("-c", "--checkpoint", help="checkpoint weights file .pth.tar
 args = parser.parse_args()
 assert args.img_type in {'thermal', 'depth'}
 
+# ckpt_name
+if args.suffix is not None:
+    suffix = args.suffix
+else:
+    suffix = args.checkpoint.split('/')[-1][5:-8] if args.checkpoint is not None else time.strftime('%m%d%H%M')
+
 # Writer for Tensorboard
 tb = SummaryWriter()
 if args.suffix:
@@ -39,7 +45,7 @@ epochs = 10000  # number of epochs to run without early-stopping
 epochs_since_improvement = 0  # number of epochs since there was an improvement in the validation metric
 best_loss = 500.  # assume a high loss at first
 workers = 4  # number of workers for loading data in the DataLoader
-print_freq = 200  # print training or validation status every __ batches
+print_freq = 10  # print training or validation status every __ batches
 lr = 1e-3  # learning rate
 momentum = 0.9  # momentum
 weight_decay = 5e-4  # weight decay
@@ -141,7 +147,7 @@ def main():
         # Save checkpoint
         save_checkpoint(epoch, epochs_since_improvement, model, optimizer, val_loss, best_loss, is_best,
                         img_type=args.img_type,
-                        suffix=args.suffix)
+                        suffix=suffix)
     tb.close()
 
 

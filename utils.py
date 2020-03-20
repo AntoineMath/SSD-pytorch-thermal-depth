@@ -763,7 +763,7 @@ def transform(image, boxes, labels, difficulties, split):
     new_image = FT.to_tensor(new_image)
 
     # Normalize by mean and standard deviation of ImageNet data that our base VGG was trained on
-    new_image = FT.normalize(new_image, mean=[new_image.type('torch.FloatTensor').mean()], std=[new_image.type('torch.FloatTensor').std()])
+    new_image = FT.normalize(new_image, mean=[new_image.type('torch.FloatTensor').mean().item()], std=[new_image.type('torch.FloatTensor').std().item()])
 
     return new_image, new_boxes, new_labels, new_difficulties
 
@@ -775,7 +775,7 @@ def thermal_image_preprocessing(image, mean, std, split, bbox=None):
     :param image: array image (h, w, c)
     :param mean: tensor of shape (1,)
     :param std: tensor of shape (1,)
-    :param bbox: box coordinates of the object in the image (TODO : allow mutliple boxes)
+    :param bbox: box coordinates of the object in the image
     :return: torch tensor of shape (2, w, h) and float32 type
     '''
     image = np.expand_dims(np.array(image), axis=-1)
@@ -976,6 +976,7 @@ def save_checkpoint(epoch, epochs_since_improvement, model, optimizer, loss, bes
     :param loss: validation loss in this epoch
     :param best_loss: best validation loss achieved so far (not necessarily in this checkpoint)
     :param is_best: is this checkpoint the best so far?
+    :param img_type: type of the images used for the training, either thermal or depth
     :param suffix: suffix added to the filename to make the comparison between trainings easier
     """
     state = {'epoch': epoch,
@@ -984,12 +985,12 @@ def save_checkpoint(epoch, epochs_since_improvement, model, optimizer, loss, bes
              'best_loss': best_loss,
              'model': model,
              'optimizer': optimizer}
-    filename = 'ckpt_' + suffix + '.pth.tar'
+    filename = f'ckpt_{suffix}.pth.tar'
     save_path = os.path.join('ckpt', img_type, filename)
     torch.save(state, save_path)
     # If this checkpoint is the best so far, store a copy so it doesn't get overwritten by a worse checkpoint
     if is_best:
-        torch.save(state, './ckpt/BEST_' + filename)
+        torch.save(state, f'ckpt/{img_type}/BEST_{filename}')
 
 
 class AverageMeter(object):
