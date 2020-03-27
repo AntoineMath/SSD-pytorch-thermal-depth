@@ -986,7 +986,10 @@ def save_checkpoint(epoch, epochs_since_improvement, model, optimizer, loss, bes
              'model': model,
              'optimizer': optimizer}
     filename = f'ckpt_{suffix}.pth.tar'
-    save_path = os.path.join('ckpt', img_type, filename)
+    dest_folder = os.path.join('ckpt', img_type)
+    if not os.path.exists(dest_folder):
+        os.makedirs(dest_folder)
+    save_path = os.path.join(dest_folder, filename)
     torch.save(state, save_path)
     # If this checkpoint is the best so far, store a copy so it doesn't get overwritten by a worse checkpoint
     if is_best:
