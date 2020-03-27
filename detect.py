@@ -8,14 +8,16 @@ from PIL import Image, ImageDraw, ImageFont
 from datasets import DetectDataset, ThermalDataset
 
 parser = argparse.ArgumentParser()
-parser.add_argument("test_data", type=str, help="path to the dataset which must contain Thermal and Thermal_8bit folders")
+parser.add_argument("test_data", type=str, help="path to a Serie containing images/ and images_8bit/ folder")
+parser.add_argument("img_type", help="type of image to detect, either 'thermal' or 'depth'", type=str)
 parser.add_argument("weights", type=str, help="path to the weights.pth.tar file")
+parser.add_argument("train_data", type=str, help="path to the train_data folder containing .json files used for training the model")
 parser.add_argument('-k', "--top_k", type=int, default=1, help="show the best k detections per image")
 args = parser.parse_args()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-training_set = ThermalDataset("/home/mathurin/prudence/datasets/dataset_mix2", split='train')
+training_set = ThermalDataset(args.train_data, img_type=args.img_type, split='train')
 mean, std = training_set.dataset_mean, training_set.dataset_std
 
 detect_dataset = DetectDataset(args.test_data, mean=mean, std=std)

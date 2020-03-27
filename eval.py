@@ -10,7 +10,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument("test_folder", type=str, help="path to the folder containing the .json datafiles")
 parser.add_argument("img_type", help="type of image to train on, either 'thermal' or 'depth'", type=str)
 parser.add_argument("weights", type=str, help="path to the weights.pth.tar file")
-parser.add_argument('--min_score', type=float, default=0.2, help="minimum score to consider a detection")
+parser.add_argument("train_data", type=str, help="path to the train_data folder containing .json files used for training the model")
+parser.add_argument('--min_score', type=float, default=0.1, help="minimum score to consider a detection")
 parser.add_argument("--max_overlap", type=float, default=0.45, help="limit of overlapping beyond which we consider there is only one object")
 parser.add_argument("-k", "--top_k", type=int, default=1, help="top k possible detections you want the model makes")
 parser.add_argument("-r", "--render", action="store_true", help='activate the render of Precision-Recall curves')
@@ -23,7 +24,7 @@ pp = PrettyPrinter()
 # Parameters
 
 # training_set : trainingset used for the training of the weights you want evaluate.
-training_set = ThermalDataset("/home/am/work/prudence/datasets/training_sample", img_type=args.img_type, split='train')
+training_set = ThermalDataset(args.train_data, img_type=args.img_type, split='train')
 keep_difficult = True  # difficult ground truth objects must always be considered in mAP calculation, because these objects DO exist!
 batch_size = 1
 workers = 4

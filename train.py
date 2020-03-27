@@ -33,6 +33,7 @@ data_folder = args.data_folder  # folder with data files
 
 keep_difficult = True  # use objects considered difficult to detect?
 
+
 # Model parameters
 # Not too many here since the SSD300 has a very specific structure
 n_classes = len(label_map)  # number of different types of objects
@@ -46,7 +47,7 @@ epochs_since_improvement = 0  # number of epochs since there was an improvement 
 best_loss = 500.  # assume a high loss at first
 workers = 4  # number of workers for loading data in the DataLoader
 print_freq = 10  # print training or validation status every __ batches
-lr = 1e-3  # learning rate
+lr = 1e-4  # learning rate
 momentum = 0.9  # momentum
 weight_decay = 5e-4  # weight decay
 grad_clip = None  # clip if gradients are exploding, which may happen at larger batch sizes (sometimes at 32) - you will recognize it by a sorting error in the MuliBox loss calculation

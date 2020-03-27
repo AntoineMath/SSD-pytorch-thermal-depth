@@ -3,7 +3,7 @@ from torch.utils.data import Dataset
 import json
 import os
 from PIL import Image
-from utils import thermal_image_preprocessing, convert_16bit_to_8bit
+from utils import thermal_depth_preprocessing, transform, convert_16bit_to_8bit
 import torchvision.transforms.functional as FT
 
 
@@ -49,6 +49,7 @@ class ThermalDataset(Dataset):
     def __getitem__(self, i):
         # Read image
         image = Image.open(self.images[i], mode='r')
+        #print(self.images[i])
         # Read objects in this image (bounding boxes, labels, difficulties)
         objects = self.objects[i]
         boxes = torch.FloatTensor(objects['boxes'])  # (n_objects, 4)
@@ -62,14 +63,14 @@ class ThermalDataset(Dataset):
             difficulties = difficulties[1-difficulties]
 
         # Apply transformation
-        image, boxes = thermal_image_preprocessing(image,
+        image, boxes = thermal_depth_preprocessing(image,
                                                    self.dataset_mean,
                                                    self.dataset_std,
                                                    split=self.split,
                                                    bbox=boxes)
+        return image, boxes, labels, difficulties
         #image, boxes, labels, difficulties = transform(image, boxes, labels, difficulties, split=self.split)
-        #return image, boxes, labels, difficulties
-        return image.type('torch.FloatTensor'), boxes, labels, difficulties
+        #return image.type('torch.FloatTensor'), boxes, labels, difficulties
 
     def __len__(self):
         return len(self.images)
@@ -136,7 +137,6 @@ class DetectDataset(Dataset):
         :param mean: mean of the original train dataset (used for image standardization)
         :param std: standard deviation of the original train dataset (used for images standardization)
         """
-
         self.data_folder = data_folder
         self.mean = torch.as_tensor(mean).type('torch.FloatTensor')
         self.std = torch.as_tensor(std).type('torch.FloatTensor')
@@ -151,7 +151,7 @@ class DetectDataset(Dataset):
         image_8bit = convert_16bit_to_8bit(self.images[i])
 
         # Apply transformation to the 16 bit image
-        image = thermal_image_preprocessing(image,
+        image = thermal_depth_preprocessing(image,
                                             split='detect',
                                             mean=self.mean,
                                             std=self.std)

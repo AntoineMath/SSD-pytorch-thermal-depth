@@ -768,13 +768,14 @@ def transform(image, boxes, labels, difficulties, split):
     return new_image, new_boxes, new_labels, new_difficulties
 
 
-def thermal_image_preprocessing(image, mean, std, split, bbox=None):
+def thermal_depth_preprocessing(image, mean, std, split, bbox=None):
     '''
     Simple preprocessing for thermal images
 
     :param image: array image (h, w, c)
     :param mean: tensor of shape (1,)
     :param std: tensor of shape (1,)
+    :param split: either 'TRAIN' or 'VAL'
     :param bbox: box coordinates of the object in the image
     :return: torch tensor of shape (2, w, h) and float32 type
     '''
@@ -882,59 +883,6 @@ def convert_16bit_to_8bit(img_16bit):
         return (bytedata.clip(low, high) + 0.5).astype(np.uint8)
 
     return bytescaling(img)
-
-
-def transform_custom(image, boxes, labels, difficulties, split):
-    """
-        Apply the transformations above.
-
-        :param image: image, a PIL Image
-        :param boxes: bounding boxes in boundary coordinates, a tensor of dimensions (n_objects, 4)
-        :param labels: labels of objects, a tensor of dimensions (n_objects)
-        :param difficulties: difficulties of detection of these objects, a tensor of dimensions (n_objects)
-        :param split: one of 'TRAIN' or 'TEST', since different sets of transformations are applied
-        :return: transformed image, transformed bounding box coordinates, transformed labels, transformed difficulties
-        """
-    assert split in {'TRAIN', 'TEST'}
-
-    new_image = image
-    new_boxes = boxes
-    new_labels = labels
-    new_difficulties = difficulties
-    # Skip the following operations if validation/evaluation
-    if split == 'TRAIN':
-        # A series of photometric distortions in random order, each with 50% chance of occurrence, as in Caffe repo
-        # new_image = photometric_distort(new_image)
-
-        # Convert PIL image to Torch tensor
-        new_image = FT.to_tensor(new_image)
-
-        # Expand image (zoom out) with a 50% chance - helpful for training detection of small objects
-        # Fill surrounding space with the mean of ImageNet data that our base VGG was trained on
-        #if random.random() < 0.5:
-        #    new_image, new_boxes = expand(new_image, boxes, filler=mean)
-
-        # Randomly crop image (zoom in)
-        new_image, new_boxes, new_labels, new_difficulties = random_crop(new_image, new_boxes, new_labels,
-                                                                         new_difficulties)
-
-        # Convert Torch tensor to PIL image
-        new_image = FT.to_pil_image(new_image)
-
-        # Flip image with a 50% chance
-        if random.random() < 0.5:
-            new_image, new_boxes = flip(new_image, new_boxes)
-
-    # Resize image to (300, 300) - this also converts absolute boundary coordinates to their fractional form
-    new_image, new_boxes = resize(new_image, new_boxes, dims=(300, 300))
-
-    # Convert PIL image to Torch tensor
-    new_image = FT.to_tensor(new_image).float()
-
-    # Normalize by mean and standard deviation of ImageNet data that our base VGG was trained on
-    new_image = FT.normalize(new_image, mean=[new_image.mean()], std=[new_image.std()])
-
-    return new_image, new_boxes, new_labels, new_difficulties
 
 
 def adjust_learning_rate(optimizer, scale):
