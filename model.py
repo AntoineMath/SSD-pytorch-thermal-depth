@@ -46,7 +46,7 @@ class VGGBase(nn.Module):
         self.conv7 = nn.Conv2d(1024, 1024, kernel_size=1)
 
         # Load pretrained layers
-        #self.load_pretrained_layers()
+        self.load_pretrained_layers()
 
     def forward(self, image):
         """
@@ -102,9 +102,17 @@ class VGGBase(nn.Module):
         pretrained_state_dict = torchvision.models.vgg16(pretrained=True).state_dict()
         pretrained_param_names = list(pretrained_state_dict.keys())
 
+
         # Transfer conv. parameters from pretrained model to current model
         for i, param in enumerate(param_names[:-4]):  # excluding conv6 and conv7 parameters
             state_dict[param] = pretrained_state_dict[pretrained_param_names[i]]
+
+        # convert the conv1_1.weight from (64, 3, 3, 3) to (64, 1, 3, 3)
+        # RGB to grayscale formula: gray_channel = = 0.2989R + 0.5870G + 0.1140B
+        conv1_1_weight = pretrained_state_dict[pretrained_param_names[0]]
+        ratios = torch.tensor([0.2989, 0.5870, 0.1140])
+        conv1_1_weight = (conv1_1_weight.permute(0, 2, 3, 1) * ratios).sum(axis=-1, keepdims=True)
+        state_dict['conv1_1.weight'] = conv1_1_weight.permute(0, -1, 1, 2)
 
         # Convert fc6, fc7 to convolutional layers, and subsample (by decimation) to sizes of conv6 and conv7
         # fc6
