@@ -108,12 +108,12 @@ def detect(detect_loader, min_score, max_overlap, top_k, suppress=None):
                       font=font)
         del draw
         annotated_image.show()
-        print('score:', det_scores[i].item())
+        print('score:', det_scores)
         input('Press Enter to detect next image')
 
 
 if __name__ == '__main__':
 
-    result = detect(detect_loader, min_score=0.001, max_overlap=0.45, top_k=args.top_k)
+    result = detect(detect_loader, min_score=0.01, max_overlap=0.45, top_k=args.top_k)
 
 
