@@ -2,7 +2,6 @@ from torch import nn
 from utils import *
 import torch.nn.functional as F
 from math import sqrt
-from itertools import product as product
 import torchvision
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -13,7 +12,7 @@ class VGGBase(nn.Module):
     VGG base convolutions to produce lower-level feature maps.
     """
 
-    def __init__(self):
+    def __init__(self, transfer_learning):
         super(VGGBase, self).__init__()
 
         # Standard convolutional layers in VGG16
@@ -46,7 +45,8 @@ class VGGBase(nn.Module):
         self.conv7 = nn.Conv2d(1024, 1024, kernel_size=1)
 
         # Load pretrained layers
-        self.load_pretrained_layers()
+        if transfer_learning:
+            self.load_pretrained_layers()
 
     def forward(self, image):
         """
@@ -333,12 +333,12 @@ class SSD300(nn.Module):
     The SSD300 network - encapsulates the base VGG network, auxiliary, and prediction convolutions.
     """
 
-    def __init__(self, n_classes):
+    def __init__(self, n_classes, transfer_learning=False):
         super(SSD300, self).__init__()
 
         self.n_classes = n_classes
 
-        self.base = VGGBase()
+        self.base = VGGBase(transfer_learning)
         self.aux_convs = AuxiliaryConvolutions()
         self.pred_convs = PredictionConvolutions(n_classes)
 

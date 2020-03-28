@@ -14,8 +14,11 @@ parser.add_argument("data_folder", help="folder containing the 4 json datafiles"
 parser.add_argument("img_type", help="type of image to train on, either 'thermal' or 'depth'", type=str)
 parser.add_argument("-s", "--suffix", help="suffix added at the end of training records (weights and tensorboard)", type=str)
 parser.add_argument("-c", "--checkpoint", help="checkpoint weights file .pth.tar to train at that ckpt", type=str)
+parser.add_argument("--transfer_learning", help="load pretrained VGG-16 weights", action='store_true')
 args = parser.parse_args()
 assert args.img_type in {'thermal', 'depth'}
+if args.checkpoint is not None:
+    assert not args.transfer_learning, "you can't specify checkpoint and pretrained weights at the same time"
 
 # ckpt_name
 if args.suffix is not None:
@@ -63,7 +66,7 @@ def main():
 
     # Initialize model or load checkpoint
     if checkpoint is None:
-        model = SSD300(n_classes=n_classes)
+        model = SSD300(n_classes=n_classes, transfer_learning=args.transfer_learning)
         # Initialize the optimizer, with twice the default learning rate for biases, as in the original Caffe repo
         biases = list()
         not_biases = list()
