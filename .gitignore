@@ -8,4 +8,5 @@ __pycache__/
 ckpt/
 /runs
 ckpt/*
+eval/*
 create_data_lists.py

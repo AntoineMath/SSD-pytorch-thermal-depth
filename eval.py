@@ -1,3 +1,5 @@
+import os
+import json
 from tqdm import tqdm
 from pprint import PrettyPrinter
 import argparse
@@ -11,7 +13,7 @@ parser.add_argument("test_folder", type=str, help="path to the folder containing
 parser.add_argument("img_type", help="type of image to train on, either 'thermal' or 'depth'", type=str)
 parser.add_argument("weights", type=str, help="path to the weights.pth.tar file")
 parser.add_argument("train_data", type=str, help="path to the train_data folder containing .json files used for training the model")
-parser.add_argument('--min_score', type=float, default=0.1, help="minimum score to consider a detection")
+parser.add_argument('--min_score', type=float, default=0.01, help="minimum score to consider a detection")
 parser.add_argument("--max_overlap", type=float, default=0.45, help="limit of overlapping beyond which we consider there is only one object")
 parser.add_argument("-k", "--top_k", type=int, default=1, help="top k possible detections you want the model makes")
 parser.add_argument("-r", "--render", action="store_true", help='activate the render of Precision-Recall curves')
@@ -23,7 +25,7 @@ pp = PrettyPrinter()
 
 # Parameters
 
-# training_set : trainingset used for the training of the weights you want evaluate.
+# training_set : training set used for the training of the weights you want evaluate.
 training_set = ThermalDataset(args.train_data, img_type=args.img_type, split='train')
 keep_difficult = True  # difficult ground truth objects must always be considered in mAP calculation, because these objects DO exist!
 batch_size = 1
@@ -112,7 +114,26 @@ def evaluate(test_loader, model, min_score, max_overlap, top_k, render):
         class_precisions, class_recalls, APs, mAP = calculate_mAP(det_boxes, det_labels, det_scores, true_boxes,
                                                                   true_labels, true_difficulties, render=render)
 
-    # Print AP for each class
+        # Creates a json file summarizing the evaluation
+        eval_info = {'img_type': args.img_type,
+                     'training_data': args.train_data,
+                     'evaluation_data': args.test_folder,
+                     'weights': args.weights,
+                     'min_score': args.min_score,
+                     'max_overlap': args.max_overlap,
+                     'top_k': args.top_k}
+
+        if not os.path.isdir('eval'):
+            os.makedirs('eval')
+
+        with open(os.path.join('eval', args.weights.split('/')[-1].replace('.pth.tar', '.json')), 'a') as file:
+            json.dump({'eval_info': eval_info,
+                       'class_precisions': class_precisions,
+                       'class_recalls': class_recalls,
+                       'APs': APs,
+                       'mAP': mAP}, file)
+
+    # Print
     print('Precisions:')
     pp.pprint(class_precisions)
     print('\nRecalls:')
