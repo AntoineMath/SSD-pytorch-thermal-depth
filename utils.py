@@ -9,7 +9,7 @@ import torchvision.transforms.functional as FT
 import matplotlib.pyplot as plt
 from imgaug import augmenters as iaa
 from imgaug.augmentables.bbs import BoundingBox, BoundingBoxesOnImage
-from PIL import Image
+
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -564,8 +564,8 @@ def random_crop(image, boxes, labels, difficulties):
     :param difficulties: difficulties of detection of these objects, a tensor of dimensions (n_objects)
     :return: cropped image, updated bounding box coordinates, updated labels, updated difficulties
     """
-    original_h = image.size(1)
-    original_w = image.size(2)
+    original_h = image.size(0)
+    original_w = image.size(1)
     # Keep choosing a minimum overlap until a successful crop is made
     while True:
         # Randomly draw the value for minimum overlap
@@ -609,7 +609,7 @@ def random_crop(image, boxes, labels, difficulties):
                 continue
 
             # Crop image
-            new_image = image[:, top:bottom, left:right]  # (3, new_h, new_w)
+            new_image = image[top:bottom, left:right]  # (new_h, new_w)
 
             # Find centers of original bounding boxes
             bb_centers = (boxes[:, :2] + boxes[:, 2:]) / 2.  # (n_objects, 2)
@@ -727,18 +727,23 @@ def transform(image, boxes, labels, difficulties, split):
 
     # Mean and standard deviation of ImageNet data that our base VGG from torchvision was trained on
     # see: https://pytorch.org/docs/stable/torchvision/models.html
+    # I used the weighted color conversion method from openCV to convert RGB to one gray channel
+    new_mean = 0.459
+    new_std = 0.226  # 0.225 TODO: check if it's true
 
     new_image = image
     new_boxes = boxes
     new_labels = labels
     new_difficulties = difficulties
+    new_image = convert_16bit_to_8bit(new_image)
+    split = 'TEST'
     # Skip the following operations if validation/evaluation
     if split == 'TRAIN':
         # A series of photometric distortions in random order, each with 50% chance of occurrence, as in Caffe repo
         #new_image = photometric_distort(new_image)
 
         # Convert PIL image to Torch tensor
-        new_image = FT.to_tensor(new_image)
+        new_image = torch.from_numpy(new_image)
 
         # Expand image (zoom out) with a 50% chance - helpful for training detection of small objects
         # Fill surrounding space with the mean of ImageNet data that our base VGG was trained on
@@ -756,6 +761,8 @@ def transform(image, boxes, labels, difficulties, split):
         if random.random() < 0.5:
             new_image, new_boxes = flip(new_image, new_boxes)
 
+    if split != 'TRAIN':
+        new_image = FT.to_pil_image(new_image)
     # Resize image to (300, 300) - this also converts absolute boundary coordinates to their fractional form
     new_image, new_boxes = resize(new_image, new_boxes, dims=(300, 300))
 
@@ -763,7 +770,7 @@ def transform(image, boxes, labels, difficulties, split):
     new_image = FT.to_tensor(new_image)
 
     # Normalize by mean and standard deviation of ImageNet data that our base VGG was trained on
-    new_image = FT.normalize(new_image, mean=[new_image.type('torch.FloatTensor').mean().item()], std=[new_image.type('torch.FloatTensor').std().item()])
+    new_image = FT.normalize(new_image, mean=[new_mean], std=[new_std])
 
     return new_image, new_boxes, new_labels, new_difficulties
 
@@ -844,8 +851,8 @@ def convert_16bit_to_8bit(img_16bit):
     :param img_16bit: 16 bit image
     :return: 8 bit image that can be shown easily
     """
-    img = Image.open(img_16bit)
-    img = np.array(img)
+    #img = Image.open(img_16bit)
+    img = np.array(img_16bit)
 
     def bytescaling(data, cmin=None, cmax=None, high=255, low=0):
         """
