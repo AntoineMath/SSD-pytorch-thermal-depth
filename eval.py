@@ -33,7 +33,7 @@ workers = 4
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 data_folder = args.test_folder
-mean, std = training_set.dataset_mean, training_set.dataset_std
+#mean, std = training_set.dataset_mean, training_set.dataset_std
 checkpoint = args.weights
 
 # Load model checkpoint that is to be evaluated
@@ -48,7 +48,7 @@ model.eval()
 test_dataset = ThermalDataset(args.test_folder,
                               img_type=args.img_type,
                               split='test',
-                              mean_std=[mean, std],
+                              #mean_std=[mean, std],
                               keep_difficult=keep_difficult)
 test_loader = torch.utils.data.DataLoader(test_dataset,
                                           batch_size=batch_size,

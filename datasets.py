@@ -11,7 +11,7 @@ class ThermalDataset(Dataset):
     """
     A pytorch Dataset class to be used in a Pytorch Dataloader to create bacthes.
     """
-    def __init__(self, data_folder, img_type, split, mean_std=None, keep_difficult=False):
+    def __init__(self, data_folder, img_type, split, keep_difficult=False):
         """
         :param data_folder: folder where data files are stored following this path:
         .
@@ -40,12 +40,6 @@ class ThermalDataset(Dataset):
             self.objects = json.load(j)
         assert len(self.images) == len(self.objects)
 
-        if mean_std:
-            self.dataset_mean = torch.as_tensor(mean_std[0]).type('torch.FloatTensor')
-            self.dataset_std = torch.as_tensor(mean_std[1]).type('torch.FloatTensor')
-        else:
-            self.dataset_mean, self.dataset_std = self.dataset_mean_std()
-
     def __getitem__(self, i):
         # Read image
         image = Image.open(self.images[i], mode='r')
@@ -63,14 +57,18 @@ class ThermalDataset(Dataset):
             difficulties = difficulties[1-difficulties]
 
         # Apply transformation
-        image, boxes = thermal_depth_preprocessing(image,
-                                                   self.dataset_mean,
-                                                   self.dataset_std,
-                                                   split=self.split,
-                                                   bbox=boxes)
-        return image, boxes, labels, difficulties
-        #image, boxes, labels, difficulties = transform(image, boxes, labels, difficulties, split=self.split)
-        #return image.type('torch.FloatTensor'), boxes, labels, difficulties
+        #image, boxes = thermal_depth_preprocessing(image,
+        #                                           self.dataset_mean,
+        #                                          self.dataset_std,
+        #                                           split=self.split,
+        #                                           bbox=boxes)
+        #return image, boxes, labels, difficulties
+        image, boxes, labels, difficulties = transform(image,
+                                                       boxes,
+                                                       labels,
+                                                       difficulties,
+                                                       split=self.split)
+        return image.type('torch.FloatTensor'), boxes, labels, difficulties
 
     def __len__(self):
         return len(self.images)
