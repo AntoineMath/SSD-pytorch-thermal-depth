@@ -736,7 +736,7 @@ def transform(image, boxes, labels, difficulties, split):
     new_labels = labels
     new_difficulties = difficulties
     new_image = convert_16bit_to_8bit(new_image)
-    split = 'TEST'
+
     # Skip the following operations if validation/evaluation
     if split == 'TRAIN':
         # A series of photometric distortions in random order, each with 50% chance of occurrence, as in Caffe repo
@@ -771,11 +771,12 @@ def transform(image, boxes, labels, difficulties, split):
 
     # Normalize by mean and standard deviation of ImageNet data that our base VGG was trained on
     new_image = FT.normalize(new_image, mean=[new_mean], std=[new_std])
+    new_image = new_image + 2  # TODO: verify if it's correct
 
     return new_image, new_boxes, new_labels, new_difficulties
 
 
-def thermal_depth_preprocessing(image, mean, std, split, bbox=None):
+def thermal_depth_preprocessing(image, split, bbox=None):
     '''
     Simple preprocessing for thermal images
 
@@ -786,11 +787,20 @@ def thermal_depth_preprocessing(image, mean, std, split, bbox=None):
     :param bbox: box coordinates of the object in the image
     :return: torch tensor of shape (2, w, h) and float32 type
     '''
-    image = np.expand_dims(np.array(image), axis=-1)
+    # Mean and standard deviation of ImageNet data that our base VGG from torchvision was trained on
+    # see: https://pytorch.org/docs/stable/torchvision/models.html
+    # I used the weighted color conversion method from openCV to convert RGB to one gray channel
+    mean = 0.459
+    std = 0.226  # 0.225 TODO: check if it's true
 
-    # Standardization
-    new_img = (image - mean.item()) / std.item()
-    new_img = new_img.astype('float32')
+    # Convert to 8bit
+    new_img = convert_16bit_to_8bit(image)
+
+    # Normalize by Imagenet mean and std
+    new_img = new_img/255.
+    new_img = (new_img-mean)/std
+    new_img = np.expand_dims(np.array(new_img), axis=-1)
+
     new_bbox = bbox
     #print(new_bbox)
     if split == 'TRAIN':
