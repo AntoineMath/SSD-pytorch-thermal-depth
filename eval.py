@@ -25,8 +25,12 @@ pp = PrettyPrinter()
 
 # Parameters
 
+
 # training_set : training set used for the training of the weights you want evaluate.
 training_set = ThermalDataset(args.train_data, img_type=args.img_type, split='train')
+
+# training_set : training set used for the training of the weights you want evaluate.
+#training_set = ThermalDataset(args.train_data, img_type=args.img_type, split='train')
 keep_difficult = True  # difficult ground truth objects must always be considered in mAP calculation, because these objects DO exist!
 batch_size = 1
 workers = 4

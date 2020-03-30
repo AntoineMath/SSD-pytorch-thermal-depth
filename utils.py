@@ -665,6 +665,7 @@ def resize(image, boxes, dims=(300, 300), return_percent_coords=True):
 
     :param image: image, a PIL Image
     :param boxes: bounding boxes in boundary coordinates, a tensor of dimensions (n_objects, 4)
+    :param dims: output dimensions
     :return: resized image, updated bounding box coordinates (or fractional coordinates, in which case they remain the same)
     """
     # Resize image
@@ -727,9 +728,14 @@ def transform(image, boxes, labels, difficulties, split):
 
     # Mean and standard deviation of ImageNet data that our base VGG from torchvision was trained on
     # see: https://pytorch.org/docs/stable/torchvision/models.html
+    mean = [0.485, 0.456, 0.406]
+    std = [0.229, 0.224, 0.225]
     # I used the weighted color conversion method from openCV to convert RGB to one gray channel
-    new_mean = 0.459
-    new_std = 0.226  # 0.225 TODO: check if it's true
+    # https://docs.opencv.org/3.4/de/d25/imgproc_color_conversions.html
+    r_w, g_w, b_w = 0.299, 0.587, 0.114
+    # TODO: seems to work better like this but this transformation is not optimal since we don't have grayscale images
+    new_mean = r_w*mean[0] + g_w*mean[1] + b_w*mean[2]
+    new_std = r_w*std[0] + g_w*std[1] + b_w*std[2]
 
     new_image = image
     new_boxes = boxes
@@ -771,7 +777,7 @@ def transform(image, boxes, labels, difficulties, split):
 
     # Normalize by mean and standard deviation of ImageNet data that our base VGG was trained on
     new_image = FT.normalize(new_image, mean=[new_mean], std=[new_std])
-    new_image = new_image + 2  # TODO: verify if it's correct
+    new_image = new_image + 2  # TODO: make the values positives in a cleaner way
 
     return new_image, new_boxes, new_labels, new_difficulties
 
@@ -789,16 +795,21 @@ def thermal_depth_preprocessing(image, split, bbox=None):
     '''
     # Mean and standard deviation of ImageNet data that our base VGG from torchvision was trained on
     # see: https://pytorch.org/docs/stable/torchvision/models.html
+    mean = [0.485, 0.456, 0.406]
+    std = [0.229, 0.224, 0.225]
     # I used the weighted color conversion method from openCV to convert RGB to one gray channel
-    mean = 0.459
-    std = 0.226  # 0.225 TODO: check if it's true
+    # https://docs.opencv.org/3.4/de/d25/imgproc_color_conversions.html
+    r_w, g_w, b_w = 0.299, 0.587, 0.114
+    # TODO: seems to work better like this but this transformation is not optimal since we don't have grayscale images
+    new_mean = r_w * mean[0] + g_w * mean[1] + b_w * mean[2]
+    new_std = r_w * std[0] + g_w * std[1] + b_w * std[2]
 
     # Convert to 8bit
     new_img = convert_16bit_to_8bit(image)
 
     # Normalize by Imagenet mean and std
     new_img = new_img/255.
-    new_img = (new_img-mean)/std
+    new_img = (new_img-new_mean)/new_std
     new_img = np.expand_dims(np.array(new_img), axis=-1)
 
     new_bbox = bbox
