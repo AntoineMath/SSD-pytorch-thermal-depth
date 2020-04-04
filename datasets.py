@@ -2,8 +2,9 @@ import torch
 from torch.utils.data import Dataset
 import json
 import os
+import numpy as np
 from PIL import Image
-from utils import thermal_depth_preprocessing, transform, convert_16bit_to_8bit
+from utils import transform_8bit_img_norm, transform_stand_dataset, transform_batch_norm, convert_16bit_to_8bit
 import torchvision.transforms.functional as FT
 
 
@@ -40,16 +41,18 @@ class ThermalDataset(Dataset):
             self.objects = json.load(j)
         assert len(self.images) == len(self.objects)
 
+        # In evaluation mode: we specify the mean and std of the dataset used to train the model we evaluate
         if mean_std:
             self.dataset_mean = torch.as_tensor(mean_std[0]).type('torch.FloatTensor')
             self.dataset_std = torch.as_tensor(mean_std[1]).type('torch.FloatTensor')
+        # In training mode: compute the mean and std of the training set to normalize images
         else:
             self.dataset_mean, self.dataset_std = self.dataset_mean_std()
 
     def __getitem__(self, i):
         # Read image
         image = Image.open(self.images[i], mode='r')
-        #print(self.images[i])
+
         # Read objects in this image (bounding boxes, labels, difficulties)
         objects = self.objects[i]
         boxes = torch.FloatTensor(objects['boxes'])  # (n_objects, 4)
@@ -62,15 +65,14 @@ class ThermalDataset(Dataset):
             labels = labels[1-difficulties]
             difficulties = difficulties[1-difficulties]
 
-        # Apply transformation
-        image, boxes = thermal_depth_preprocessing(image,
-                                                   self.dataset_mean,
-                                                   self.dataset_std,
-                                                   split=self.split,
-                                                   bbox=boxes)
-        return image, boxes, labels, difficulties
-        #image, boxes, labels, difficulties = transform(image, boxes, labels, difficulties, split=self.split)
-        #return image.type('torch.FloatTensor'), boxes, labels, difficulties
+        image, boxes, labels, difficulties = transform_batch_norm(image,
+                                                       boxes,
+                                                       labels,
+                                                       difficulties,
+                                                       #mean=self.dataset_mean,
+                                                       #std=self.dataset_std,
+                                                       split=self.split)
+        return image.type('torch.FloatTensor'), boxes, labels, difficulties
 
     def __len__(self):
         return len(self.images)
@@ -124,7 +126,7 @@ class DetectDataset(Dataset):
     """
     A pytorch Dataset class to be used in a Pytorch Dataloader to load test examples.
     """
-    def __init__(self, data_folder, mean, std):
+    def __init__(self, data_folder):
         """
         :param data_folder: folder where data files are stored following this path:
         .
@@ -138,8 +140,6 @@ class DetectDataset(Dataset):
         :param std: standard deviation of the original train dataset (used for images standardization)
         """
         self.data_folder = data_folder
-        self.mean = torch.as_tensor(mean).type('torch.FloatTensor')
-        self.std = torch.as_tensor(std).type('torch.FloatTensor')
         self.images = [os.path.join(data_folder, img) for img in os.listdir(data_folder)]
 
     def __getitem__(self, i):
@@ -148,14 +148,20 @@ class DetectDataset(Dataset):
         original_width = image.width
         original_height = image.height
 
-        image_8bit = convert_16bit_to_8bit(self.images[i])
+        image_8bit = convert_16bit_to_8bit(image)
 
         # Apply transformation to the 16 bit image
-        image = thermal_depth_preprocessing(image,
-                                            split='detect',
-                                            mean=self.mean,
-                                            std=self.std)
+        #image = thermal_depth_preprocessing(image,
+        #                                    split='detect',
+        #                                    mean=self.mean,
+        #                                    std=self.std)
+        #return image.type('torch.FloatTensor'), image_8bit, original_width, original_height
 
+        image, boxes, labels, difficulties = transform_batch_norm(image,
+                                                                  boxes=torch.Tensor([[0, 0, 0, 0]]),
+                                                                  labels=None,
+                                                                  difficulties=None,
+                                                                  split='TEST')
         return image.type('torch.FloatTensor'), image_8bit, original_width, original_height
 
     def __len__(self):

@@ -3,7 +3,6 @@ import argparse
 import torch.backends.cudnn as cudnn
 import torch.optim
 import torch.utils.data
-import torchvision
 from torch.utils.tensorboard import SummaryWriter
 from model import SSD300, MultiBoxLoss
 from datasets import ThermalDataset
@@ -27,9 +26,10 @@ else:
     suffix = args.checkpoint.split('/')[-1][5:-8] if args.checkpoint is not None else time.strftime('%m%d%H%M')
 
 # Writer for Tensorboard
-tb = SummaryWriter()
 if args.suffix:
     tb = SummaryWriter(comment='_' + args.suffix)
+else:
+    tb = SummaryWriter()
 
 # Data parameters
 data_folder = args.data_folder  # folder with data files
@@ -131,7 +131,8 @@ def main():
         # One epoch's validation
         val_loss = validate(val_loader=val_loader,
                             model=model,
-                            criterion=criterion)
+                            criterion=criterion,
+                            epoch=epoch)
 
         # Did validation loss improve?
         is_best = val_loss < best_loss
@@ -215,7 +216,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
     del predicted_locs, predicted_scores, images, boxes, labels  # free some memory since their histories may be stored
 
 
-def validate(val_loader, model, criterion):
+def validate(val_loader, model, criterion, epoch):
     """
     One epoch's validation.
 

@@ -16,6 +16,7 @@ class VGGBase(nn.Module):
         super(VGGBase, self).__init__()
 
         # Standard convolutional layers in VGG16
+        self.batch_norm = nn.BatchNorm2d(num_features=1)
         self.conv1_1 = nn.Conv2d(1, 64, kernel_size=3, padding=1)  # stride = 1, by default
         self.conv1_2 = nn.Conv2d(64, 64, kernel_size=3, padding=1)
         self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
@@ -52,10 +53,9 @@ class VGGBase(nn.Module):
         """
         Forward propagation.
 
-        :param image: images, a tensor of dimensions (N, 3, 300, 300)
-        :return: lower-level feature maps conv4_3 and conv7
         """
-        out = F.relu(self.conv1_1(image))  # (N, 64, 300, 300)
+        out = self.batch_norm(image)  # (N, 1, 300, 300)
+        out = F.relu(self.conv1_1(out))  # (N, 64, 300, 300)
         out = F.relu(self.conv1_2(out))  # (N, 64, 300, 300)
         out = self.pool1(out)  # (N, 64, 150, 150)
 
@@ -96,7 +96,7 @@ class VGGBase(nn.Module):
         """
         # Current state of base
         state_dict = self.state_dict()
-        param_names = list(state_dict.keys())
+        param_names = [param for param in state_dict.keys() if "batch_norm" not in param]
 
         # Pretrained VGG base
         pretrained_state_dict = torchvision.models.vgg16(pretrained=True).state_dict()
