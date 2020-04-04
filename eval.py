@@ -12,7 +12,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("test_folder", type=str, help="path to the folder containing the .json datafiles")
 parser.add_argument("img_type", help="type of image to train on, either 'thermal' or 'depth'", type=str)
 parser.add_argument("weights", type=str, help="path to the weights.pth.tar file")
-parser.add_argument("train_data", type=str, help="path to the train_data folder containing .json files used for training the model")
+#parser.add_argument("train_data", type=str, help="path to the train_data folder containing .json files used for training the model")
 parser.add_argument('--min_score', type=float, default=0.01, help="minimum score to consider a detection")
 parser.add_argument("--max_overlap", type=float, default=0.45, help="limit of overlapping beyond which we consider there is only one object")
 parser.add_argument("-k", "--top_k", type=int, default=1, help="top k possible detections you want the model makes")
@@ -25,19 +25,15 @@ pp = PrettyPrinter()
 
 # Parameters
 
-
-# training_set : training set used for the training of the weights you want evaluate.
-training_set = ThermalDataset(args.train_data, img_type=args.img_type, split='train')
-
 # training_set : training set used for the training of the weights you want evaluate.
 #training_set = ThermalDataset(args.train_data, img_type=args.img_type, split='train')
+#mean, std = training_set.dataset_mean, training_set.dataset_std
+
 keep_difficult = True  # difficult ground truth objects must always be considered in mAP calculation, because these objects DO exist!
 batch_size = 1
 workers = 4
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 data_folder = args.test_folder
-#mean, std = training_set.dataset_mean, training_set.dataset_std
 checkpoint = args.weights
 
 # Load model checkpoint that is to be evaluated
@@ -120,7 +116,7 @@ def evaluate(test_loader, model, min_score, max_overlap, top_k, render):
 
         # Creates a json file summarizing the evaluation
         eval_info = {'img_type': args.img_type,
-                     'training_data': args.train_data,
+                     #'training_data': args.train_data,
                      'evaluation_data': args.test_folder,
                      'weights': args.weights,
                      'min_score': args.min_score,

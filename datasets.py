@@ -4,7 +4,7 @@ import json
 import os
 import numpy as np
 from PIL import Image
-from utils import thermal_depth_preprocessing, transform, convert_16bit_to_8bit
+from utils import transform_8bit_img_norm, transform_stand_dataset, transform_batch_norm, convert_16bit_to_8bit
 import torchvision.transforms.functional as FT
 
 
@@ -65,17 +65,12 @@ class ThermalDataset(Dataset):
             labels = labels[1-difficulties]
             difficulties = difficulties[1-difficulties]
 
-        # Apply transformation
-        #image, boxes = thermal_depth_preprocessing(image,
-        #                                           self.dataset_mean,
-        #                                          self.dataset_std,
-        #                                           split=self.split,
-        #                                           bbox=boxes)
-        #return image, boxes, labels, difficulties
-        image, boxes, labels, difficulties = transform(image,
+        image, boxes, labels, difficulties = transform_batch_norm(image,
                                                        boxes,
                                                        labels,
                                                        difficulties,
+                                                       #mean=self.dataset_mean,
+                                                       #std=self.dataset_std,
                                                        split=self.split)
         return image.type('torch.FloatTensor'), boxes, labels, difficulties
 
@@ -131,7 +126,7 @@ class DetectDataset(Dataset):
     """
     A pytorch Dataset class to be used in a Pytorch Dataloader to load test examples.
     """
-    def __init__(self, data_folder, mean, std):
+    def __init__(self, data_folder):
         """
         :param data_folder: folder where data files are stored following this path:
         .
@@ -145,8 +140,6 @@ class DetectDataset(Dataset):
         :param std: standard deviation of the original train dataset (used for images standardization)
         """
         self.data_folder = data_folder
-        self.mean = torch.as_tensor(mean).type('torch.FloatTensor')
-        self.std = torch.as_tensor(std).type('torch.FloatTensor')
         self.images = [os.path.join(data_folder, img) for img in os.listdir(data_folder)]
 
     def __getitem__(self, i):
@@ -164,11 +157,11 @@ class DetectDataset(Dataset):
         #                                    std=self.std)
         #return image.type('torch.FloatTensor'), image_8bit, original_width, original_height
 
-        image, boxes, labels, difficulties = transform(image,
-                                                       boxes=torch.Tensor([[0, 0, 0, 0]]),
-                                                       labels=None,
-                                                       difficulties=None,
-                                                       split='TEST')
+        image, boxes, labels, difficulties = transform_batch_norm(image,
+                                                                  boxes=torch.Tensor([[0, 0, 0, 0]]),
+                                                                  labels=None,
+                                                                  difficulties=None,
+                                                                  split='TEST')
         return image.type('torch.FloatTensor'), image_8bit, original_width, original_height
 
     def __len__(self):

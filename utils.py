@@ -3,12 +3,9 @@ import os
 import torch
 import random
 import numpy as np
-import skimage
 import xml.etree.ElementTree as ET
 import torchvision.transforms.functional as FT
 import matplotlib.pyplot as plt
-from imgaug import augmenters as iaa
-from imgaug.augmentables.bbs import BoundingBox, BoundingBoxesOnImage
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -558,7 +555,7 @@ def random_crop(image, boxes, labels, difficulties):
 
     Adapted from https://github.com/amdegroot/ssd.pytorch/blob/master/utils/augmentations.py
 
-    :param image: image, a tensor of dimensions (3, original_h, original_w)
+    :param image: image, a tensor of dimensions (original_h, original_w)
     :param boxes: bounding boxes in boundary coordinates, a tensor of dimensions (n_objects, 4)
     :param labels: labels of objects, a tensor of dimensions (n_objects)
     :param difficulties: difficulties of detection of these objects, a tensor of dimensions (n_objects)
@@ -713,7 +710,7 @@ def photometric_distort(image):
     return new_image
 
 
-def transform(image, boxes, labels, difficulties, split):
+def transform_8bit_img_norm(image, boxes, labels, difficulties, mean, std, split):
     """
     Apply the transformations above.
 
@@ -725,31 +722,19 @@ def transform(image, boxes, labels, difficulties, split):
     :return: transformed image, transformed bounding box coordinates, transformed labels, transformed difficulties
     """
     assert split in {'TRAIN', 'TEST'}
-
-    # Mean and standard deviation of ImageNet data that our base VGG from torchvision was trained on
-    # see: https://pytorch.org/docs/stable/torchvision/models.html
-    mean = [0.485, 0.456, 0.406]
-    std = [0.229, 0.224, 0.225]
-    # I used the weighted color conversion method from openCV to convert RGB to one gray channel
-    # https://docs.opencv.org/3.4/de/d25/imgproc_color_conversions.html
-    r_w, g_w, b_w = 0.299, 0.587, 0.114
-    # TODO: seems to work better like this but this transformation is not optimal since we don't have grayscale images
-    new_mean = r_w*mean[0] + g_w*mean[1] + b_w*mean[2]
-    new_std = r_w*std[0] + g_w*std[1] + b_w*std[2]
-
     new_image = image
+    new_image = convert_16bit_to_8bit(new_image)
+    new_image = torch.from_numpy(new_image).type('torch.FloatTensor')
     new_boxes = boxes
     new_labels = labels
     new_difficulties = difficulties
-    new_image = convert_16bit_to_8bit(new_image)
+
 
     # Skip the following operations if validation/evaluation
     if split == 'TRAIN':
-        # A series of photometric distortions in random order, each with 50% chance of occurrence, as in Caffe repo
-        #new_image = photometric_distort(new_image)
 
         # Convert PIL image to Torch tensor
-        new_image = torch.from_numpy(new_image)
+
 
         # Expand image (zoom out) with a 50% chance - helpful for training detection of small objects
         # Fill surrounding space with the mean of ImageNet data that our base VGG was trained on
@@ -768,102 +753,117 @@ def transform(image, boxes, labels, difficulties, split):
             new_image, new_boxes = flip(new_image, new_boxes)
 
     if split != 'TRAIN':
-        new_image = FT.to_pil_image(new_image)
+        new_image = FT.to_pil_image(new_image)  # PIL img mode L
+
     # Resize image to (300, 300) - this also converts absolute boundary coordinates to their fractional form
     new_image, new_boxes = resize(new_image, new_boxes, dims=(300, 300))
 
     # Convert PIL image to Torch tensor
-    new_image = FT.to_tensor(new_image)
+    new_image = FT.to_tensor(new_image)  # normalize the image between 0 and 1
 
     # Normalize by mean and standard deviation of ImageNet data that our base VGG was trained on
-    new_image = FT.normalize(new_image, mean=[new_mean], std=[new_std])
-    new_image = new_image + 2  # TODO: make the values positives in a cleaner way
+    #new_image = FT.normalize(new_image, mean=[new_image_tensor.mean().item()], std=[new_image.std().item()])
 
     return new_image, new_boxes, new_labels, new_difficulties
 
 
-def thermal_depth_preprocessing(image, split, bbox=None):
-    '''
-    Simple preprocessing for thermal images
+def transform_stand_dataset(image, boxes, labels, difficulties, mean, std, split):
+    """
+    Apply the transformations above.
 
-    :param image: array image (h, w, c)
-    :param mean: tensor of shape (1,)
-    :param std: tensor of shape (1,)
-    :param split: either 'TRAIN' or 'VAL'
-    :param bbox: box coordinates of the object in the image
-    :return: torch tensor of shape (2, w, h) and float32 type
-    '''
-    # Mean and standard deviation of ImageNet data that our base VGG from torchvision was trained on
-    # see: https://pytorch.org/docs/stable/torchvision/models.html
-    mean = [0.485, 0.456, 0.406]
-    std = [0.229, 0.224, 0.225]
-    # I used the weighted color conversion method from openCV to convert RGB to one gray channel
-    # https://docs.opencv.org/3.4/de/d25/imgproc_color_conversions.html
-    r_w, g_w, b_w = 0.299, 0.587, 0.114
-    # TODO: seems to work better like this but this transformation is not optimal since we don't have grayscale images
-    new_mean = r_w * mean[0] + g_w * mean[1] + b_w * mean[2]
-    new_std = r_w * std[0] + g_w * std[1] + b_w * std[2]
+    :param image: image, a PIL Image
+    :param boxes: bounding boxes in boundary coordinates, a tensor of dimensions (n_objects, 4)
+    :param labels: labels of objects, a tensor of dimensions (n_objects)
+    :param difficulties: difficulties of detection of these objects, a tensor of dimensions (n_objects)
+    :param split: one of 'TRAIN' or 'TEST', since different sets of transformations are applied
+    :return: transformed image, transformed bounding box coordinates, transformed labels, transformed difficulties
+    """
+    assert split in {'TRAIN', 'TEST'}
+    new_image = image
+    new_boxes = boxes
+    new_labels = labels
+    new_difficulties = difficulties
 
-    # Convert to 8bit
-    new_img = convert_16bit_to_8bit(image)
 
-    # Normalize by Imagenet mean and std
-    new_img = new_img/255.
-    new_img = (new_img-new_mean)/new_std
-    new_img = np.expand_dims(np.array(new_img), axis=-1)
-
-    new_bbox = bbox
-    #print(new_bbox)
+    # Skip the following operations if validation/evaluation
     if split == 'TRAIN':
-        new_img, new_bbox = data_augmentation(new_img, bbox)
-        boxes = []
-        for nb in new_bbox.bounding_boxes:
-            boxes.append([nb.x1, nb.y1, nb.x2, nb.y2])
-        new_bbox = torch.FloatTensor(boxes)
 
-    # Reshape to (1, 300, 300)
-    new_img = skimage.transform.resize(new_img, (300, 300))
-    new_img = np.moveaxis(new_img, -1, 0)
-    new_img = torch.FloatTensor(new_img)
-
-    if bbox is not None:
-        old_dims = torch.FloatTensor([image.shape[1], image.shape[0], image.shape[1], image.shape[0]]).unsqueeze(0)
-        new_bbox = new_bbox / old_dims  # percent coordinates
-        return new_img, new_bbox
-    return new_img
+        # Convert PIL image to Torch tensor
 
 
-def data_augmentation(image, bbox=None):
-    list_box = []
-    for box in bbox.tolist():
-        list_box.append(BoundingBox(*box))
-    bbs = BoundingBoxesOnImage(list_box, shape=image.shape)
+        # Expand image (zoom out) with a 50% chance - helpful for training detection of small objects
+        # Fill surrounding space with the mean of ImageNet data that our base VGG was trained on
+        #if random.random() < 0.5:
+        #    new_image, new_boxes = expand(new_image, boxes, 0)
+        new_image = FT.to_tensor(new_image)
 
-    augmenters = [iaa.SomeOf((1, 3),
-                             [iaa.Crop(percent=(0.1, 0.2)),
-                              #iaa.Affine(rotate=(-30, 30)),
-                              #iaa.AdditiveGaussianNoise(scale=0.05 * np.max(image[0])),
-                              iaa.OneOf([iaa.Dropout(p=(0.01, 0.2)),
-                                         iaa.CoarseDropout((0.03, 0.15), size_percent=(0.02, 0.05))]),
-                              iaa.Fliplr(1.0)],
-                             random_order=True)
-                  ]
-    for i in range(50):
-        seq = iaa.Sometimes(0.8, augmenters)
-        if bbs:
-            image_aug, bbs_aug = seq(image=image, bounding_boxes=bbs)
-            wrong_boxes = 0
-            for bb in bbs_aug.bounding_boxes:
-                bb_cliped_area = bb.clip_out_of_image(image_aug).area
-                bb_area = bb.area
-                # Si on crop plus de 20% d'une bbox lors du clip_out_of_image(), on recommence.
-                if bb_cliped_area / bb_area < 0.8:
-                    wrong_boxes += 1
-            if wrong_boxes == 0:
-                bbs_aug = bbs_aug.clip_out_of_image()
-                break
+        # Randomly crop image (zoom in)
+        new_image, new_boxes, new_labels, new_difficulties = random_crop(new_image, new_boxes, new_labels,
+                                                                         new_difficulties)
 
-    return image_aug, bbs_aug
+        # Convert Torch tensor to PIL image
+        new_image = FT.to_pil_image(new_image)
+
+        # Flip image with a 50% chance
+        if random.random() < 0.5:
+            new_image, new_boxes = flip(new_image, new_boxes)
+
+    # Resize image to (300, 300) - this also converts absolute boundary coordinates to their fractional form
+    new_image, new_boxes = resize(new_image, new_boxes, dims=(300, 300))
+
+    # Convert PIL image to Torch tensor
+    new_image = FT.to_tensor(new_image).type('torch.FloatTensor')
+
+    # Normalize by mean and standard deviation of ImageNet data that our base VGG was trained on
+    new_image = FT.normalize(new_image, mean=[mean.item()], std=[std.item()])
+
+    return new_image, new_boxes, new_labels, new_difficulties
+
+
+def transform_batch_norm(image, boxes, labels, difficulties, split):
+    """
+    Apply the transformations above.
+
+    :param image: image, a PIL Image
+    :param boxes: bounding boxes in boundary coordinates, a tensor of dimensions (n_objects, 4)
+    :param labels: labels of objects, a tensor of dimensions (n_objects)
+    :param difficulties: difficulties of detection of these objects, a tensor of dimensions (n_objects)
+    :param split: one of 'TRAIN' or 'TEST', since different sets of transformations are applied
+    :return: transformed image, transformed bounding box coordinates, transformed labels, transformed difficulties
+    """
+    assert split in {'TRAIN', 'TEST'}
+    new_image = image
+    new_boxes = boxes
+    new_labels = labels
+    new_difficulties = difficulties
+
+    # Skip the following operations if validation/evaluation
+    if split == 'TRAIN':
+
+        # Convert PIL image to Torch tensor
+        new_image = FT.to_tensor(new_image)
+
+        # Randomly crop image (zoom in)
+        new_image, new_boxes, new_labels, new_difficulties = random_crop(new_image, new_boxes, new_labels,
+                                                                         new_difficulties)
+
+        # Convert Torch tensor to PIL image
+        new_image = FT.to_pil_image(new_image)
+
+        # Flip image with a 50% chance
+        if random.random() < 0.5:
+            new_image, new_boxes = flip(new_image, new_boxes)
+
+    # Resize image to (300, 300) - this also converts absolute boundary coordinates to their fractional form
+    new_image, new_boxes = resize(new_image, new_boxes, dims=(300, 300))
+
+    new_image = np.expand_dims(np.array(new_image), axis=0)  # (1, 300, 300)
+    new_image = torch.from_numpy(new_image).type('torch.FloatTensor')
+
+    # Note: still a 16 bit images with values from 0 to 65535. The batch normalization is made at the beginning
+    # of the network with nn.BatchNorm2D layer.
+
+    return new_image, new_boxes, new_labels, new_difficulties
 
 
 def convert_16bit_to_8bit(img_16bit):
@@ -872,7 +872,6 @@ def convert_16bit_to_8bit(img_16bit):
     :param img_16bit: 16 bit image
     :return: 8 bit image that can be shown easily
     """
-    #img = Image.open(img_16bit)
     img = np.array(img_16bit)
 
     def bytescaling(data, cmin=None, cmax=None, high=255, low=0):

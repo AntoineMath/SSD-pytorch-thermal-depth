@@ -4,23 +4,25 @@ from tqdm import tqdm
 from torchvision import transforms
 import torch
 from utils import rev_label_map, label_color_map, resize
-from PIL import Image, ImageDraw, ImageFont
+from PIL import ImageDraw, ImageFont
 from datasets import DetectDataset, ThermalDataset
 
 parser = argparse.ArgumentParser()
 parser.add_argument("test_data", type=str, help="path to a Serie containing images/ and images_8bit/ folder")
 parser.add_argument("img_type", help="type of image to detect, either 'thermal' or 'depth'", type=str)
 parser.add_argument("weights", type=str, help="path to the weights.pth.tar file")
-parser.add_argument("train_data", type=str, help="path to the train_data folder containing .json files used for training the model")
+#parser.add_argument("train_data", type=str, help="path to the train_data folder containing .json files used for training the model")
 parser.add_argument('-k', "--top_k", type=int, default=1, help="show the best k detections per image")
+parser.add_argument('--min_score', type=float, default=0.01, help="minimum score to consider a detection")
+parser.add_argument("--max_overlap", type=float, default=0.45, help="limit of overlapping beyond which we consider there is only one object")
 args = parser.parse_args()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-training_set = ThermalDataset(args.train_data, img_type=args.img_type, split='train')
-mean, std = training_set.dataset_mean, training_set.dataset_std
+#training_set = ThermalDataset(args.train_data, img_type=args.img_type, split='train')
+#mean, std = training_set.dataset_mean, training_set.dataset_std
 
-detect_dataset = DetectDataset(args.test_data, mean=mean, std=std)
+detect_dataset = DetectDataset(args.test_data)
 detect_loader = torch.utils.data.DataLoader(detect_dataset, batch_size=1, shuffle=True)
 
 checkpoint = args.weights
@@ -114,6 +116,6 @@ def detect(detect_loader, min_score, max_overlap, top_k, suppress=None):
 
 if __name__ == '__main__':
 
-    result = detect(detect_loader, min_score=0.01, max_overlap=0.45, top_k=args.top_k)
+    result = detect(detect_loader, min_score=args.min_score, max_overlap=args.max_overlap, top_k=args.top_k)
 
 
