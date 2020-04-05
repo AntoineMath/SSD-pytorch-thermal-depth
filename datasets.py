@@ -72,9 +72,7 @@ class ThermalDepthDataset(Dataset):
                                                                             split=self.split,
                                                                             boxes=boxes,
                                                                             labels=labels,
-                                                                            difficulties=difficulties,
-                                                                            mean=self.dataset_mean,
-                                                                            std=self.dataset_std)
+                                                                            difficulties=difficulties)
 
         return thermal_image, depth_image, boxes, labels, difficulties
 

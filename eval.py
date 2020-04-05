@@ -19,8 +19,6 @@ args = parser.parse_args()
 pp = PrettyPrinter()
 
 # Parameters
-training_set = ThermalDepthDataset("../datasets/dataset_mix2", split='train')
-mean, std = training_set.dataset_mean, training_set.dataset_std
 data_folder = args.test_folder
 keep_difficult = True  # difficult ground truth objects must always be considered in mAP calculation, because these objects DO exist!
 batch_size = 1
@@ -37,7 +35,7 @@ model = model.to(device)
 model.eval()
 
 # Load test data
-test_dataset = ThermalDepthDataset(args.test_folder, split='test', mean_std=[mean, std], keep_difficult=keep_difficult)
+test_dataset = ThermalDepthDataset(args.test_folder, split='test', keep_difficult=keep_difficult)
 test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False,
                                           collate_fn=test_dataset.collate_fn, num_workers=workers, pin_memory=True)
 

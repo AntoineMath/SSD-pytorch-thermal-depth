@@ -5,7 +5,7 @@ import torch.optim
 import torch.utils.data
 import torchvision
 from torch.utils.tensorboard import SummaryWriter
-from model_merge_pool1 import SSD300, MultiBoxLoss
+from model import SSD300, MultiBoxLoss
 from datasets import ThermalDepthDataset
 from utils import *
 

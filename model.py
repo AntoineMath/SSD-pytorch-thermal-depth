@@ -2,7 +2,6 @@ from torch import nn
 from utils import *
 import torch.nn.functional as F
 from math import sqrt
-from itertools import product as product
 import torchvision
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -17,6 +16,7 @@ class VGGBasePreMergeThermal(nn.Module):
         super(VGGBasePreMergeThermal, self).__init__()
 
         # Standard convolutional layers in VGG16
+        self.batch_norm = nn.BatchNorm2d(1)
         self.conv1_1 = nn.Conv2d(1, 64, kernel_size=3, padding=1)  # stride = 1, by default
         self.conv1_2 = nn.Conv2d(64, 64, kernel_size=3, padding=1)
         self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
@@ -30,7 +30,8 @@ class VGGBasePreMergeThermal(nn.Module):
         :param image: images, a tensor of dimensions (N, 3, 300, 300)
         :return: lower-level feature maps conv4_3 and conv7
         """
-        out = F.relu(self.conv1_1(image))  # (N, 64, 300, 300)
+        out = self.batch_norm(image)
+        out = F.relu(self.conv1_1(out))  # (N, 64, 300, 300)
         out = F.relu(self.conv1_2(out))  # (N, 64, 300, 300)
         out = self.pool1(out)  # (N, 64, 150, 150)
 
@@ -46,7 +47,7 @@ class VGGBasePreMergeThermal(nn.Module):
         """
         # Current state of base
         state_dict = self.state_dict()
-        param_names = list(state_dict.keys())
+        param_names = [param for param in state_dict.keys() if "batch_norm" not in param]
 
         # Pretrained VGG base
         pretrained_state_dict = torchvision.models.vgg16(pretrained=True).state_dict()
@@ -56,9 +57,16 @@ class VGGBasePreMergeThermal(nn.Module):
         for i, param in enumerate(param_names[:len(param_names)]):  # excluding conv6 and conv7 parameters
             state_dict[param] = pretrained_state_dict[pretrained_param_names[i]]
 
+        # convert the conv1_1.weight from (64, 3, 3, 3) to (64, 1, 3, 3)
+        # RGB to grayscale formula: gray_channel = = 0.2989R + 0.5870G + 0.1140B
+        conv1_1_weight = pretrained_state_dict[pretrained_param_names[0]]
+        ratios = torch.tensor([0.2989, 0.5870, 0.1140])
+        conv1_1_weight = (conv1_1_weight.permute(0, 2, 3, 1) * ratios).sum(axis=-1, keepdims=True)
+        state_dict['conv1_1.weight'] = conv1_1_weight.permute(0, -1, 1, 2)
+
         self.load_state_dict(state_dict)
 
-        print("\nLoaded base model.\n")
+        print("\nLoaded corresponding pretrained weights for VGGBasePreMergeThermal NN.\n")
 
 
 class VGGBasePreMergeDepth(nn.Module):
@@ -70,9 +78,12 @@ class VGGBasePreMergeDepth(nn.Module):
         super(VGGBasePreMergeDepth, self).__init__()
 
         # Standard convolutional layers in VGG16
+        self.batch_norm = nn.BatchNorm2d(1)
         self.conv1_1 = nn.Conv2d(1, 64, kernel_size=3, padding=1)  # stride = 1, by default
         self.conv1_2 = nn.Conv2d(64, 64, kernel_size=3, padding=1)
         self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        self.load_pretrained_layers()
 
     def forward(self, image):
         """
@@ -81,7 +92,8 @@ class VGGBasePreMergeDepth(nn.Module):
         :param image: images, a tensor of dimensions (N, 3, 300, 300)
         :return: lower-level feature maps conv4_3 and conv7
         """
-        out = F.relu(self.conv1_1(image))  # (N, 64, 300, 300)
+        out = self.batch_norm(image)
+        out = F.relu(self.conv1_1(out))  # (N, 64, 300, 300)
         out = F.relu(self.conv1_2(out))  # (N, 64, 300, 300)
         out = self.pool1(out)  # (N, 64, 150, 150)
 
@@ -97,19 +109,26 @@ class VGGBasePreMergeDepth(nn.Module):
         """
         # Current state of base
         state_dict = self.state_dict()
-        param_names = list(state_dict.keys())
+        param_names = [param for param in state_dict.keys() if "batch_norm" not in param]
 
         # Pretrained VGG base
         pretrained_state_dict = torchvision.models.vgg16(pretrained=True).state_dict()
         pretrained_param_names = list(pretrained_state_dict.keys())
 
         # Transfer conv. parameters from pretrained model to current model
-        for i, param in enumerate(param_names[:-4]):  # excluding conv6 and conv7 parameters
+        for i, param in enumerate(param_names[:len(param_names)]):  # excluding conv6 and conv7 parameters
             state_dict[param] = pretrained_state_dict[pretrained_param_names[i]]
+
+        # convert the conv1_1.weight from (64, 3, 3, 3) to (64, 1, 3, 3)
+        # RGB to grayscale formula: gray_channel = = 0.2989R + 0.5870G + 0.1140B
+        conv1_1_weight = pretrained_state_dict[pretrained_param_names[0]]
+        ratios = torch.tensor([0.2989, 0.5870, 0.1140])
+        conv1_1_weight = (conv1_1_weight.permute(0, 2, 3, 1) * ratios).sum(axis=-1, keepdims=True)
+        state_dict['conv1_1.weight'] = conv1_1_weight.permute(0, -1, 1, 2)
 
         self.load_state_dict(state_dict)
 
-        print("\nLoaded base model.\n")
+        print("\nLoaded corresponding pretrained weights for VGGBasePreMergeDepth NN.\n")
 
 
 class VGGBaseAfterMerge(nn.Module):
@@ -145,7 +164,7 @@ class VGGBaseAfterMerge(nn.Module):
         self.conv7 = nn.Conv2d(1024, 1024, kernel_size=1)
 
         # Load pretrained layers
-        # self.load_pretrained_layers()
+        self.load_pretrained_layers()
 
     def forward(self, out_pool1):
         """
@@ -199,7 +218,11 @@ class VGGBaseAfterMerge(nn.Module):
 
         # Transfer conv. parameters from pretrained model to current model
         for i, param in enumerate(param_names[:-4]):  # excluding conv6 and conv7 parameters
-            state_dict[param] = pretrained_state_dict[pretrained_param_names[i]]
+            state_dict[param] = pretrained_state_dict[pretrained_param_names[i+4]]
+
+        # Stacking twice the pretrained weights for layer 2_1 since we stack 2 VGGBasePremerge layers
+        conv2_1_weight = torch.cat((pretrained_state_dict['features.5.weight'], pretrained_state_dict['features.5.weight']), 1)
+        state_dict['conv2_1.weight'] = conv2_1_weight
 
         # Convert fc6, fc7 to convolutional layers, and subsample (by decimation) to sizes of conv6 and conv7
         # fc6
@@ -219,7 +242,7 @@ class VGGBaseAfterMerge(nn.Module):
 
         self.load_state_dict(state_dict)
 
-        print("\nLoaded base model.\n")
+        print("\nLoaded corresponding pretrained weights for VGGBaseAfterMerge NN.\n")
 
 
 class AuxiliaryConvolutions(nn.Module):

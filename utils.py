@@ -725,7 +725,7 @@ def photometric_distort(image):
     return new_image
 
 
-def transform(thermal_img, depth_img, boxes, labels, difficulties, split, mean, std):
+def transform(thermal_img, depth_img, boxes, labels, difficulties, split):
     """
     Apply the transformations above.
 
@@ -760,14 +760,6 @@ def transform(thermal_img, depth_img, boxes, labels, difficulties, split, mean, 
         # Flip image with a 50% chance
         if random.random() < 0.5:
             new_thermal_img, new_depth_img, new_boxes = flip(new_thermal_img, new_depth_img, new_boxes)
-
-    # Standardization by substracting mean and dividing by standard deviation of the training_set
-    new_thermal_img = (new_thermal_img - mean[0]) / std[0]
-    new_depth_img = (new_depth_img - mean[1]) / std[1]
-
-    # Positive standardization to have pixels values [0, 1]
-    #new_thermal_img = (new_thermal_img.clamp(-1., 1.) + 1) / 2.
-    #new_depth_img = (new_depth_img.clamp(-1., 1.) + 1) / 2.
 
     # Resize image to (300, 300) - this also converts absolute boundary coordinates to their fractional form
     new_thermal_img, new_boxes = resize(new_thermal_img, new_boxes, dims=(300, 300))
