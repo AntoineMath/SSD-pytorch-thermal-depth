@@ -21,6 +21,8 @@ class VGGBasePreMergeThermal(nn.Module):
         self.conv1_2 = nn.Conv2d(64, 64, kernel_size=3, padding=1)
         self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
 
+        self.load_pretrained_layers()
+
     def forward(self, image):
         """
         Forward propagation.
@@ -51,7 +53,7 @@ class VGGBasePreMergeThermal(nn.Module):
         pretrained_param_names = list(pretrained_state_dict.keys())
 
         # Transfer conv. parameters from pretrained model to current model
-        for i, param in enumerate(param_names[:-4]):  # excluding conv6 and conv7 parameters
+        for i, param in enumerate(param_names[:len(param_names)]):  # excluding conv6 and conv7 parameters
             state_dict[param] = pretrained_state_dict[pretrained_param_names[i]]
 
         self.load_state_dict(state_dict)
