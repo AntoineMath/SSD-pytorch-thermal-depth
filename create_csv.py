@@ -3,7 +3,7 @@ import csv
 import argparse
 import torchvision.transforms.functional as FT
 import torch
-from utils import rev_label_map, resize
+from utils import rev_label_map, transform_batch_norm
 from PIL import Image
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -38,23 +38,23 @@ def create_scv(folder_path, output_path, weights, min_score=0.2, max_overlap=0.4
     model = model.to(device)
     model.eval()
 
-    boxes = list()
-    labels = list()
-    images_path = list()
+    boxes_list = list()
+    labels_list = list()
+    images_path_list = list()
 
     for file in os.listdir(folder_path):
         if not file.endswith(".png"):
             continue
         img_path = os.path.join(folder_path, file)
         img = Image.open(img_path)
-        img, _ = resize(img, boxes=torch.Tensor([0, 0, 0, 0]), dims=(300, 300))
 
-        # Move to default device
-        img = FT.to_tensor(img).type('torch.FloatTensor')
-        img = FT.normalize(img, mean=[img.mean()],
-                             std=[img.std()])
-        img = img.type('torch.FloatTensor').to(device)
-
+        #Normalizing the same way as train/val images
+        img, boxes, labels, difficulties = transform_batch_norm(img,
+                                                                boxes=torch.Tensor([[0, 0, 0, 0]]),
+                                                                labels=None,
+                                                                  difficulties=None,
+                                                                  split='TEST')
+        img = img.to(device)
         # Forward prop.
         predicted_locs, predicted_scores = model(img.unsqueeze(0))
 
@@ -62,8 +62,8 @@ def create_scv(folder_path, output_path, weights, min_score=0.2, max_overlap=0.4
         det_boxes, det_labels, det_scores = model.detect_objects(predicted_locs, predicted_scores, min_score=min_score,
                                                                  max_overlap=max_overlap, top_k=top_k)
 
-        # Move detections to the CPU
-        det_boxes = det_boxes[0].to('cpu')
+        # Move detections to the device
+        det_boxes = det_boxes[0].to(device)
 
         # Decode class integer labels
         det_labels = [rev_label_map[l] for l in det_labels[0].to(device).tolist()]
@@ -74,9 +74,9 @@ def create_scv(folder_path, output_path, weights, min_score=0.2, max_overlap=0.4
                 if det_labels[i] in suppress:
                     continue
 
-        images_path.append(img_path)
-        boxes.append(det_boxes.tolist())
-        labels.append(det_labels)
+        images_path_list.append(img_path)
+        boxes_list.append(det_boxes.tolist())
+        labels_list.append(det_labels)
 
     # Write the result in a csv
     mode = 'a'
@@ -88,11 +88,11 @@ def create_scv(folder_path, output_path, weights, min_score=0.2, max_overlap=0.4
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
 
-        for i in range(len(images_path)):
-            for j in range(len(labels[i])):
-                writer.writerow({'image_name': images_path[i],
-                                 'posture': labels[i][j],
-                                 'bbox_coords': boxes[i][j]})
+        for i in range(len(images_path_list)):
+            for j in range(len(labels_list[i])):
+                writer.writerow({'image_name': images_path_list[i],
+                                 'posture': labels_list[i][j],
+                                 'bbox_coords': boxes_list[i][j]})
 
     print('\ndone')
 
