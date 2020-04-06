@@ -4,14 +4,14 @@ import json
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument("xml_thermal", type=str, help="path to thermal detection file.csv")
-parser.add_argument("xml_depth", type=str, help="path to depth detection file.csv")
+parser.add_argument("csv_thermal", type=str, help="path to thermal detection file.csv")
+parser.add_argument("csv_depth", type=str, help="path to depth detection file.csv")
 parser.add_argument("save_path", type=str, help="path where to save the output file.csv")
 parser.add_argument("--gt", type=str, help="path to the folder containing TEST_thermal/depth_images/objects.json")
 args = parser.parse_args()
 
-xml_thermal = args.xml_thermal
-xml_depth = args.xml_depth
+csv_thermal = args.csv_thermal
+csv_depth = args.csv_depth
 save_path = args.save_path
 labels_path = args.gt 
 
@@ -27,10 +27,10 @@ if labels_path is not None:
     with open(obj_json, 'r') as f:
         objects_json = [obj['labels'] for obj in json.load(f)]
 
-with open(xml_thermal) as f:
+with open(csv_thermal) as f:
     csv_reader = csv.reader(f, delimiter=',')
     thermal_img, thermal_postures = list(zip(*csv_reader))[:2]
-with open(xml_depth) as f:
+with open(csv_depth) as f:
     csv_reader = csv.reader(f, delimiter=',')
     depth_img, depth_postures = list(zip(*csv_reader))[:2]
 
