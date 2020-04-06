@@ -1,4 +1,3 @@
-
 import argparse
 from tqdm import tqdm
 from torchvision import transforms
@@ -9,7 +8,7 @@ from datasets import DetectDataset, ThermalDataset
 
 parser = argparse.ArgumentParser()
 parser.add_argument("test_data", type=str, help="path to a Serie containing images/ and images_8bit/ folder")
-parser.add_argument("img_type", help="type of image to detect, either 'thermal' or 'depth'", type=str)
+#parser.add_argument("img_type", help="type of image to detect, either 'thermal' or 'depth'", type=str)
 parser.add_argument("weights", type=str, help="path to the weights.pth.tar file")
 #parser.add_argument("train_data", type=str, help="path to the train_data folder containing .json files used for training the model")
 parser.add_argument('-k', "--top_k", type=int, default=1, help="show the best k detections per image")
@@ -25,8 +24,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 detect_dataset = DetectDataset(args.test_data)
 detect_loader = torch.utils.data.DataLoader(detect_dataset, batch_size=1, shuffle=True)
 
-checkpoint = args.weights
-checkpoint = torch.load(checkpoint)
+checkpoint = torch.load(args.weights)
 start_epoch = checkpoint['epoch'] + 1
 best_loss = checkpoint['best_loss']
 print('\nLoaded checkpoint from epoch %d. Best loss so far is %.3f.\n' % (start_epoch, best_loss))
