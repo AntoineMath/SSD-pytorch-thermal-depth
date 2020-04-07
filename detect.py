@@ -1,6 +1,6 @@
 import argparse
 from tqdm import tqdm
-from torchvision import transforms
+import torchvision.transforms.functional as FT
 import torch
 from utils import rev_label_map, label_color_map, resize
 from PIL import ImageDraw, ImageFont
@@ -46,8 +46,11 @@ def detect(detect_loader, min_score, max_overlap, top_k, suppress=None):
     """
 
     for i, (image, image_8bit, original_width, original_height) in enumerate(tqdm(detect_loader, desc='detection')):
+
+        image_8bit = FT.to_pil_image(image_8bit)
+
         image = image.to(device)  # (1, 1, 300, 300)
-        image_8bit = transforms.ToPILImage()(image_8bit)
+
         # Forward prop.
         predicted_locs, predicted_scores = model(image)
 

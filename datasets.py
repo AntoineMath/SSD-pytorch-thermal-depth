@@ -2,9 +2,9 @@ import torch
 from torch.utils.data import Dataset
 import json
 import os
-import numpy as np
 from PIL import Image
 from utils import transform_8bit_img_norm, transform_stand_dataset, transform_batch_norm, convert_16bit_to_8bit
+from utils import resize
 import torchvision.transforms.functional as FT
 
 
@@ -148,8 +148,6 @@ class DetectDataset(Dataset):
         original_width = image.width
         original_height = image.height
 
-        image_8bit = convert_16bit_to_8bit(image)
-
         # Apply transformation to the 16 bit image
         #image = thermal_depth_preprocessing(image,
         #                                    split='detect',
@@ -162,6 +160,9 @@ class DetectDataset(Dataset):
                                                                   labels=None,
                                                                   difficulties=None,
                                                                   split='TEST')
+
+        image_8bit = convert_16bit_to_8bit(image).squeeze()
+
         return image.type('torch.FloatTensor'), image_8bit, original_width, original_height
 
     def __len__(self):
