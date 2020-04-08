@@ -1,7 +1,7 @@
 
 import argparse
 from tqdm import tqdm
-from torchvision import transforms
+import torchvision.transforms.functional as FT
 import torch
 from utils import rev_label_map, label_color_map, resize
 from PIL import Image, ImageDraw, ImageFont
@@ -24,7 +24,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Load model checkpoint
 
 #TODO: simplifier le processus de standardization
-detect_dataset = DetectDataset(args.test_data, mean=27970.5, std=188.4542)
+detect_dataset = DetectDataset(args.test_data)
 detect_loader = torch.utils.data.DataLoader(detect_dataset, batch_size=1, shuffle=True)
 
 checkpoint = args.weights
@@ -49,11 +49,14 @@ def detect(detect_loader, min_score, max_overlap, top_k, suppress=None):
     :return: annotated image, a PIL Image
     """
 
-    for i, (image, image_8bit, original_width, original_height) in enumerate(tqdm(detect_loader, desc='detection')):
-        image = image.to(device)  # (1, 1, 300, 300)
-        image_8bit = transforms.ToPILImage()(image_8bit)
+    for i, (thermal_image, depth_image, image_8bit, original_width, original_height) in enumerate(tqdm(detect_loader, desc='detection')):
+        thermal_image = thermal_image.to(device)  # (1, 1, 300, 300)
+        depth_image = depth_image.to(device)
+
+        image_8bit = FT.to_pil_image(image_8bit)
+
         # Forward prop.
-        predicted_locs, predicted_scores = model(image)
+        predicted_locs, predicted_scores = model(thermal_image, depth_image)
 
         # Detect objects in SSD output
         det_boxes, det_labels, det_scores = model.detect_objects(predicted_locs, predicted_scores, min_score=min_score,

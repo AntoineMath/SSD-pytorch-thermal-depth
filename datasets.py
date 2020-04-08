@@ -3,7 +3,7 @@ from torch.utils.data import Dataset
 import json
 import os
 from PIL import Image
-from utils import thermal_image_preprocessing, transform, convert_16bit_to_8bit
+from utils import transform, convert_16bit_to_8bit
 import torchvision.transforms.functional as FT
 
 
@@ -143,7 +143,7 @@ class DetectDataset(Dataset):
     """
     A pytorch Dataset class to be used in a Pytorch Dataloader to load test examples.
     """
-    def __init__(self, data_folder, mean, std):
+    def __init__(self, data_folder):
         """
         :param data_folder: folder where data files are stored following this path:
         .
@@ -158,28 +158,30 @@ class DetectDataset(Dataset):
         """
 
         self.data_folder = data_folder
-        self.mean = torch.as_tensor(mean).type('torch.FloatTensor')
-        self.std = torch.as_tensor(std).type('torch.FloatTensor')
-        self.images = [os.path.join(data_folder, img) for img in os.listdir(data_folder)]
+        self.thermal_images = [os.path.join(data_folder, 'Thermique', img) for img in os.listdir(os.path.join(self.data_folder, 'Thermique'))]
+        self.depth_images = [img.replace('Thermique', 'Profondeur').replace('thermal', 'depth') for img in self.thermal_images]
 
     def __getitem__(self, i):
         # Read image
-        image = Image.open(self.images[i], mode='r')
-        original_width = image.width
-        original_height = image.height
+        thermal_image = Image.open(self.thermal_images[i], mode='r')
+        depth_image = Image.open(self.depth_images[i], mode='r')
+        original_width = thermal_image.width
+        original_height = thermal_image.height
 
-        image_8bit = convert_16bit_to_8bit(self.images[i])
+        image_8bit = convert_16bit_to_8bit(self.thermal_images[i])
 
         # Apply transformation to the 16 bit image
-        image = thermal_image_preprocessing(image,
-                                            split='detect',
-                                            mean=self.mean,
-                                            std=self.std)
+        thermal_image, depth_image, boxes, labels, difficulties = transform(thermal_image,
+                                                                               depth_image,
+                                                                               boxes=torch.Tensor([[0, 0, 0, 0]]),
+                                                                               labels=None,
+                                                                               difficulties=None,
+                                                                               split='TEST')
 
-        return image.type('torch.FloatTensor'), image_8bit, original_width, original_height
+        return thermal_image.type('torch.FloatTensor'), depth_image.type('torch.FloatTensor'), image_8bit, original_width, original_height
 
     def __len__(self):
-        return len(self.images)
+        return len(self.thermal_images)
 
 
 

@@ -654,44 +654,42 @@ def flip(thermal_img, depth_img, boxes):
     :return: flipped image, updated bounding box coordinates
     """
     # Flip image horizontaly
-    new_thermal_img = thermal_img.flip([0, 2])
-    new_depth_img = depth_img.flip([0,2])
+    new_thermal_img = FT.hflip(thermal_img)
+    new_depth_img = FT.hflip(depth_img)
 
     # Flip boxes
     new_boxes = boxes
-    new_boxes[:, 0] = thermal_img.shape[-1] - boxes[:, 0] - 1
-    new_boxes[:, 2] = thermal_img.shape[-1] - boxes[:, 2] - 1
+    new_boxes[:, 0] = thermal_img.width - boxes[:, 0] - 1
+    new_boxes[:, 2] = thermal_img.width - boxes[:, 2] - 1
     new_boxes = new_boxes[:, [2, 1, 0, 3]]
 
     return new_thermal_img, new_depth_img, new_boxes
 
 
-def resize(image, boxes=None, dims=300, return_percent_coords=True):
+def resize(image, boxes, dims=(300, 300), return_percent_coords=True):
     """
     Resize image. For the SSD300, resize to (300, 300).
 
     Since percent/fractional coordinates are calculated for the bounding boxes (w.r.t image dimensions) in this process,
     you may choose to retain them.
 
-    :param image: image, float Tensor
+    :param image: image, a PIL Image
     :param boxes: bounding boxes in boundary coordinates, a tensor of dimensions (n_objects, 4)
+    :param dims: output dimensions
     :return: resized image, updated bounding box coordinates (or fractional coordinates, in which case they remain the same)
     """
-    # Resize image, need to be of shape (batch, c, h, w)
-    new_image = F.interpolate(image.unsqueeze(0), size=dims).squeeze(0) #
+    # Resize image
+    new_image = FT.resize(image, dims)
 
     # Resize bounding boxes
-    if boxes is not None:
-        old_dims = torch.FloatTensor([image.shape[2], image.shape[1], image.shape[2], image.shape[1]]).unsqueeze(0)
-        new_boxes = boxes / old_dims  # percent coordinates
+    old_dims = torch.FloatTensor([image.width, image.height, image.width, image.height]).unsqueeze(0)
+    new_boxes = boxes / old_dims  # percent coordinates
 
-        if not return_percent_coords:
-            new_dims = torch.FloatTensor([dims[1], dims[0], dims[1], dims[0]]).unsqueeze(0)
-            new_boxes = new_boxes * new_dims
+    if not return_percent_coords:
+        new_dims = torch.FloatTensor([dims[1], dims[0], dims[1], dims[0]]).unsqueeze(0)
+        new_boxes = new_boxes * new_dims
 
-        return new_image, new_boxes
-
-    return new_image
+    return new_image, new_boxes
 
 
 def photometric_distort(image):
@@ -744,12 +742,14 @@ def transform(thermal_img, depth_img, boxes, labels, difficulties, split):
     new_labels = labels
     new_difficulties = difficulties
 
-    # Convert PIL image to torch Tensor
-    new_thermal_img = FT.to_tensor(new_thermal_img).type(torch.FloatTensor)
-    new_depth_img = FT.to_tensor(new_depth_img).type(torch.FloatTensor)
+
 
     # Skip the following operations if validation/evaluation
     if split == 'TRAIN':
+        # Convert PIL image to torch Tensor
+        new_thermal_img = FT.to_tensor(new_thermal_img).type(torch.FloatTensor)
+        new_depth_img = FT.to_tensor(new_depth_img).type(torch.FloatTensor)
+
         # Randomly crop image (zoom in)
         new_thermal_img, new_depth_img, new_boxes, new_labels, new_difficulties = random_crop(new_thermal_img,
                                                                                               new_depth_img,
@@ -757,13 +757,22 @@ def transform(thermal_img, depth_img, boxes, labels, difficulties, split):
                                                                                               new_labels,
                                                                                               new_difficulties)
 
+        new_thermal_img = FT.to_pil_image(new_thermal_img.type('torch.IntTensor'))
+        new_depth_img = FT.to_pil_image(new_depth_img.type('torch.IntTensor'))
+
         # Flip image with a 50% chance
         if random.random() < 0.5:
             new_thermal_img, new_depth_img, new_boxes = flip(new_thermal_img, new_depth_img, new_boxes)
 
     # Resize image to (300, 300) - this also converts absolute boundary coordinates to their fractional form
     new_thermal_img, new_boxes = resize(new_thermal_img, new_boxes, dims=(300, 300))
-    new_depth_img = resize(new_depth_img, dims=(300, 300))
+    new_depth_img, _ = resize(new_depth_img, torch.tensor([[0, 0, 0, 0]]), dims=(300, 300))
+
+    new_thermal_img = np.expand_dims(np.array(new_thermal_img), axis=0)  # (1, 300, 300)
+    new_thermal_img = torch.from_numpy(new_thermal_img).type('torch.FloatTensor')
+
+    new_depth_img = np.expand_dims(np.array(new_depth_img), axis=0)  # (1, 300, 300)
+    new_depth_img = torch.from_numpy(new_depth_img).type('torch.FloatTensor')
 
     return new_thermal_img, new_depth_img, new_boxes, new_labels, new_difficulties
 

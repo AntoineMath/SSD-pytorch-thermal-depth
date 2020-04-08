@@ -9,7 +9,7 @@ from datasets import ThermalDepthDataset
 parser = argparse.ArgumentParser()
 parser.add_argument("test_folder", type=str, help="path to the folder containing the .json datafiles")
 parser.add_argument("weights", type=str, help="path to the weights.pth.tar file")
-parser.add_argument('--min_score', type=float, default=0.2, help="minimum score to consider a detection")
+parser.add_argument('--min_score', type=float, default=0.01, help="minimum score to consider a detection")
 parser.add_argument("--max_overlap", type=float, default=0.45, help="limit of overlapping beyond which we consider there is only one object")
 parser.add_argument("-k", "--top_k", type=int, default=1, help="top k possible detections you want the model makes")
 parser.add_argument("-r", "--render", action="store_true", help='activate the render of Precision-Recall curves')
