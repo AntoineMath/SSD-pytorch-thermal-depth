@@ -4,9 +4,13 @@ from tqdm import tqdm
 from pprint import PrettyPrinter
 import argparse
 import torch
-from utils import calculate_mAP
+from utils import calculate_mAP, rev_label_map
 from datasets import ThermalDataset
-
+from sklearn.metrics import confusion_matrix
+import seaborn as sn
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 
 parser = argparse.ArgumentParser()
 parser.add_argument("test_folder", type=str, help="path to the folder containing the .json datafiles")
@@ -110,6 +114,8 @@ def evaluate(test_loader, model, min_score, max_overlap, top_k, render):
             true_labels.extend(labels)
             true_difficulties.extend(difficulties)
 
+
+
         # Calculate mAP
         class_precisions, class_recalls, APs, mAP = calculate_mAP(det_boxes, det_labels, det_scores, true_boxes,
                                                                   true_labels, true_difficulties, render=render)
@@ -142,6 +148,19 @@ def evaluate(test_loader, model, min_score, max_overlap, top_k, render):
     print('\nAP:')
     pp.pprint(APs)
     print('\nMean Average Precision (mAP): %.3f' % mAP)
+
+    # Plot confusion matrix
+    y_true = [rev_label_map[label.item()] for label in true_labels]
+    y_pred = [rev_label_map[label.item()] for label in det_labels]
+    data = confusion_matrix(y_true, y_pred, normalize=None)
+    df_cm = pd.DataFrame(data, columns=np.unique(y_true), index=np.unique(y_true))
+    df_cm.index.name = 'Actual'
+    df_cm.columns.name = 'Predicted'
+    plt.figure(figsize=(10, 7))
+    sn.set(font_scale=1.4)  # for label size
+    sn.heatmap(df_cm, cmap="Blues", annot=True, annot_kws={"size": 16})  # font size
+    plt.show()
+
 
 
 if __name__ == '__main__':
