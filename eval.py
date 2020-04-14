@@ -2,9 +2,13 @@ from tqdm import tqdm
 from pprint import PrettyPrinter
 import argparse
 import torch
-from utils import calculate_mAP
+from utils import calculate_mAP, rev_label_map
 from datasets import ThermalDepthDataset
-
+from sklearn.metrics import confusion_matrix
+import seaborn as sn
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 
 parser = argparse.ArgumentParser()
 parser.add_argument("test_folder", type=str, help="path to the folder containing the .json datafiles")
@@ -36,7 +40,7 @@ model.eval()
 
 # Load test data
 test_dataset = ThermalDepthDataset(args.test_folder, split='test', keep_difficult=keep_difficult)
-test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False,
+test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=True,
                                           collate_fn=test_dataset.collate_fn, num_workers=workers, pin_memory=True)
 
 
@@ -106,6 +110,8 @@ def evaluate(test_loader, model, min_score, max_overlap, top_k, render):
     print('\nAP:')
     pp.pprint(APs)
     print('\nMean Average Precision (mAP): %.3f' % mAP)
+
+
 
 
 if __name__ == '__main__':
