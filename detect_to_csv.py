@@ -9,7 +9,7 @@ from PIL import Image
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def create_scv(folder_path, output_path, weights, min_score=0.2, max_overlap=0.45, top_k=1, suppress=None):
+def create_csv(folder_path, output_path, weights, min_score=0.2, max_overlap=0.45, top_k=1, suppress=None):
     """
     Detect objects in an image with a trained SSD300, and visualize the results.
 
@@ -109,6 +109,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     args.__dict__ = {k: v for k, v in args.__dict__.items() if v is not None}
 
-    create_scv(**vars(args))
+    create_csv(**vars(args))
 
 
