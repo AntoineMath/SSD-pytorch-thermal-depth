@@ -22,7 +22,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 #mean, std = training_set.dataset_mean, training_set.dataset_std
 
 detect_dataset = DetectDataset(args.test_data)
-detect_loader = torch.utils.data.DataLoader(detect_dataset, batch_size=1, shuffle=True)
+detect_loader = torch.utils.data.DataLoader(detect_dataset, batch_size=1, shuffle=False)
 
 checkpoint = torch.load(args.weights)
 start_epoch = checkpoint['epoch'] + 1
